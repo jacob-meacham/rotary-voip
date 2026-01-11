@@ -184,10 +184,10 @@ After foundation, we'll build incrementally:
 - [x] Commit: "Add integration tests (Docker SIPp + manual real provider)"
 
 ### Phase 9: Call Manager
-- [ ] CallManager with state machine
-- [ ] Speed dial / whitelist logic
-- [ ] Tests
-- [ ] Commit: "Add call manager"
+- [x] CallManager with state machine
+- [x] Speed dial / allowlist logic
+- [x] 24 comprehensive tests
+- [x] Commit: "Add call manager with state machine"
 
 ### Phase 10: Phone Controller Integration
 - [ ] Wire all components together
