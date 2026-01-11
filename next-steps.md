@@ -168,12 +168,17 @@ After foundation, we'll build incrementally:
 - [x] Commit: "Add ringer component"
 
 ### Phase 8: SIP Client
-- [ ] SIPClient class (PJSUA2)
-- [ ] Account registration
-- [ ] Call handling
-- [ ] Mock SIP for testing
-- [ ] Tests
-- [ ] Commit: "Add SIP client"
+- [x] SIPClient abstract base class
+- [x] InMemorySIPClient for testing
+- [x] PyVoIPClient for real VoIP calls (using pyVoIP library)
+- [x] Account registration (simulated + real)
+- [x] Call handling (make/receive/answer/hangup)
+- [x] Call state management
+- [x] Callback system (incoming call, answered, ended)
+- [x] Background thread for call state monitoring
+- [x] 25 comprehensive tests
+- [x] Commit: "Add SIP client abstraction"
+- [x] Commit: "Add pyVoIP real SIP client implementation"
 
 ### Phase 9: Call Manager
 - [ ] CallManager with state machine

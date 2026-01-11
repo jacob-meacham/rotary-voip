@@ -5,6 +5,7 @@ description = "Rotary phone VoIP controller - converts vintage rotary phones to 
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
+    "pyvoip>=1.6.8",
     "pyyaml>=6.0",
 ]
 
