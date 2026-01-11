@@ -1,0 +1,52 @@
+# Default configuration for Rotary Phone VoIP Controller
+# User config (config.yaml) will override these values
+
+# SIP/VoIP Settings
+sip:
+  server: ""                    # VoIP.ms server (e.g., seattle.voip.ms)
+  username: ""                  # VoIP.ms account or sub-account
+  password: ""                  # SIP password (not web password)
+  port: 5060                    # SIP port
+  stun_server: "stun.voip.ms"   # STUN server for NAT traversal
+
+# Speed Dial Mappings
+# Short codes that map to full phone numbers
+# Example: "11": "+12065551234"  # Dad's cell
+speed_dial: {}
+
+# Whitelist - numbers that can be dialed directly
+# Use [] to block all direct dialing (speed dial only)
+# Use ["*"] to allow any number
+# Example: ["+12065551234", "+12065555678", "911"]
+whitelist: []
+
+# Hardware GPIO Pin Assignments (BCM numbering)
+hardware:
+  pin_hook: 17              # Hook switch (HIGH = on-hook, LOW = off-hook)
+  pin_dial_pulse: 27        # Dial pulse input
+  pin_dial_active: 22       # Dial off-normal (optional, 0 to disable)
+  pin_ringer: 23            # Ringer amplifier enable
+  pin_low_battery: 24       # PowerBoost LBO pin (optional, 0 to disable)
+
+# Timing Constants (in seconds)
+timing:
+  debounce_time: 0.01           # GPIO debounce time (10ms)
+  pulse_timeout: 0.3            # Max time between pulses in same digit
+  inter_digit_timeout: 2.0      # Time to wait for next digit before dialing
+  ring_duration: 2.0            # Ring on time
+  ring_pause: 4.0               # Ring off time
+
+# Audio Settings
+audio:
+  ring_sound: "sounds/ring.wav"           # Path to ring sound file
+  dial_tone: "sounds/dialtone.wav"        # Path to dial tone
+  busy_tone: "sounds/busy.wav"            # Path to busy signal
+  error_tone: "sounds/error.wav"          # Path to error tone
+  use_original_ringer: false              # Use original bell (requires HV circuit)
+
+# Logging
+logging:
+  level: "INFO"                 # DEBUG, INFO, WARNING, ERROR
+  file: ""                      # Log file path (empty = stdout only)
+  max_bytes: 10485760           # 10MB max log file size
+  backup_count: 3               # Number of backup log files

@@ -5,6 +5,9 @@ import logging
 import sys
 from typing import NoReturn
 
+from rotary_phone.config import ConfigManager
+from rotary_phone.config.config_manager import ConfigError
+
 
 def setup_logging(debug: bool = False) -> None:
     """Configure logging for the application.
@@ -63,12 +66,44 @@ def main() -> NoReturn:
     else:
         logger.info("Running in REAL GPIO mode")
 
-    logger.info(f"Configuration file: {args.config}")
-    logger.debug("Debug logging enabled")
+    # Load configuration
+    try:
+        logger.info(f"Loading configuration from: {args.config}")
+        config = ConfigManager(user_config_path=args.config)
+        logger.info("Configuration loaded successfully")
+
+        # Log some key config info
+        sip_config = config.get_sip_config()
+        if sip_config.get("server"):
+            logger.info(f"SIP server: {sip_config['server']}")
+        else:
+            logger.warning("No SIP server configured (required for real calls)")
+
+        speed_dial = config.get("speed_dial", {})
+        logger.info(f"Speed dial entries: {len(speed_dial)}")
+
+        whitelist = config.get("whitelist", [])
+        if "*" in whitelist:
+            logger.info("Whitelist: ALL numbers allowed")
+        else:
+            logger.info(f"Whitelist entries: {len(whitelist)}")
+
+    except ConfigError as e:
+        logger.error(f"Configuration error: {e}")
+        logger.error("Please check your config file and try again")
+        sys.exit(1)
+    except FileNotFoundError:
+        logger.warning(f"Config file not found: {args.config}")
+        logger.info("Using default configuration only")
+        try:
+            config = ConfigManager()
+        except ConfigError as e:
+            logger.error(f"Default configuration is invalid: {e}")
+            sys.exit(1)
 
     logger.info("Phone controller starting...")
 
-    # TODO: Initialize components
+    # TODO: Initialize components with config
     # TODO: Start main event loop
 
     logger.info("Phone controller is ready!")
