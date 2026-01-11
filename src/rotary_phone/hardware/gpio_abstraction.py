@@ -1,7 +1,6 @@
 """GPIO abstraction layer supporting both real hardware and mocking."""
 
 import logging
-import os
 import threading
 from abc import ABC, abstractmethod
 from enum import IntEnum
