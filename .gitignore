@@ -29,6 +29,8 @@ venv/
 ENV/
 env/
 .env
+.env.*
+!.env.template
 
 # uv
 .uv/

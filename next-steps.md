@@ -176,9 +176,12 @@ After foundation, we'll build incrementally:
 - [x] Call state management
 - [x] Callback system (incoming call, answered, ended)
 - [x] Background thread for call state monitoring
-- [x] 25 comprehensive tests
+- [x] 25 comprehensive unit tests (InMemorySIPClient)
+- [x] Docker integration tests with SIPp
+- [x] Manual test script for real SIP provider (voip.ms)
 - [x] Commit: "Add SIP client abstraction"
 - [x] Commit: "Add pyVoIP real SIP client implementation"
+- [x] Commit: "Add integration tests (Docker SIPp + manual real provider)"
 
 ### Phase 9: Call Manager
 - [ ] CallManager with state machine

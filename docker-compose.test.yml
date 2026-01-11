@@ -1,0 +1,24 @@
+version: '3.8'
+
+services:
+  sipp:
+    build:
+      context: docker/sipp
+      dockerfile: Dockerfile
+    ports:
+      - "5060:5060/udp"
+      - "6000-6010:6000-6010/udp"  # RTP ports
+    command: >
+      sipp
+      -sf /scenarios/simple_uas.xml
+      -p 5060
+      -mp 6000
+      -mi 127.0.0.1
+      -trace_msg
+      -trace_err
+    networks:
+      - test_network
+
+networks:
+  test_network:
+    driver: bridge

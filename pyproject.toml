@@ -32,9 +32,14 @@ testpaths = ["tests"]
 python_files = ["test_*.py"]
 python_classes = ["Test*"]
 python_functions = ["test_*"]
+norecursedirs = ["manual"]  # Exclude manual test scripts
+markers = [
+    "integration: marks tests as integration tests (require Docker/SIP server)",
+]
 addopts = [
     "-v",
     "--strict-markers",
+    "-m", "not integration",  # Exclude integration tests by default
 ]
 # Coverage will be added later when we have real functionality to test
 
@@ -55,3 +60,6 @@ disable = [
     "missing-class-docstring",
     "missing-function-docstring",
 ]
+
+[dependency-groups]
+dev = []
