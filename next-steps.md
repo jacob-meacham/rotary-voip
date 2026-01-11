@@ -1,53 +1,48 @@
 # Next Steps - Rotary Phone VoIP Project
 
 ## Current Status
-✅ **Code Cleanup Complete**: All quality improvements done
-
-### Cleanup Tasks (Completed):
-- [x] Remove dead FileNotFoundError handler
-- [x] Fix threading issue in MockGPIO
-- [x] Convert Pins class to Enum
-- [x] Add type specificity to ConfigManager.get()
-- [x] Rename GPIO → PhoneHardware in public API
-- [x] Fix all pylint errors (10.00/10 score)
-- [x] Ensure full mypy type coverage (0 errors)
-- [x] Fix logging to use lazy % formatting
-- [x] Add proper exception chaining with `from`
-- [x] Remove unnecessary pass statements
-- [x] Add encoding to file opens
-
----
-
-✅ **Phase 5 Complete**: HookMonitor with debouncing is working
+✅ **Phases 1-6 Complete**: Foundation through HookMonitor working with test infrastructure
 
 Latest commits:
+- `14bd156` - Refactor test infrastructure: extract shared fixtures and helpers
+- `178df7d` - Add HookMonitor component with debouncing
+- `20435fa` - Add DialReader component with automated test harness
+- `ab0d72e` - Remove auto-detection from get_gpio(), require explicit mock parameter
+- `7762505` - Simplify Pin constants from IntEnum to plain module constants
+- `51fff81` - Code quality improvements: linting, typing, and cleanup
 - `81d174e` - Add GPIO abstraction layer for hardware independence
 - `168e05c` - Simplify configuration: remove GPIO pins, rename to allowlist
 - `da0ec54` - Add configuration management system
 - `b3c0977` - Initial project setup with uv and pytest
 
 What works now:
-- YAML-based configuration with simplified structure
-- GPIO abstraction (MockGPIO + RealGPIO) for hardware independence
-- Pin constants defined (HOOK=17, DIAL_PULSE=27, etc.)
-- Full GPIO simulation for testing without hardware
-- Edge detection with callbacks
-- **DialReader component** - Reads rotary dial pulses and detects digits
-  - Counts pulses with timeout-based digit completion
-  - Thread-safe pulse handling
-  - Proper mapping (1 pulse = 1, 10 pulses = 0)
-- **HookMonitor component** - Detects phone on-hook/off-hook state changes
-  - Debouncing to prevent spurious state changes from switch bounce
-  - State verification after debounce period
-  - Callbacks for pick-up and hang-up events
-  - Thread-safe with Timer-based debouncing
-- **Automated test harness** - Simulation helpers for testing real logic
+- ✅ **Phase 1: Foundation** - Modern Python dev environment with uv and pytest
+- ✅ **Phase 2: Configuration Management** - YAML-based config with simplified structure
+- ✅ **Phase 3: GPIO Abstraction** - MockGPIO + RealGPIO for hardware independence
+  - Pin constants defined (HOOK=17, DIAL_PULSE=27, etc.)
+  - Full GPIO simulation for testing without hardware
+  - Edge detection with callbacks
+- ✅ **Phase 4: Test Harness** - Simulation helpers for testing real logic
   - simulate_pulse() - Generate single pulse
   - simulate_dial_digit() - Dial digit with proper timing
   - simulate_dial_number() - Dial full phone numbers
   - simulate_pick_up() / simulate_hang_up() - Hook state changes
   - simulate_hook_bounce() - Mechanical switch bounce
-- 52 tests all passing (13 config + 11 dial reader + 12 hook monitor + 16 GPIO)
+  - Shared test fixtures in conftest.py
+  - Test harness utilities in test_harness.py
+- ✅ **Phase 5: DialReader component** - Reads rotary dial pulses and detects digits
+  - Counts pulses with timeout-based digit completion
+  - Thread-safe pulse handling
+  - Proper mapping (1 pulse = 1, 10 pulses = 0)
+  - 11 tests all passing
+- ✅ **Phase 6: HookMonitor component** - Detects phone on-hook/off-hook state changes
+  - Debouncing to prevent spurious state changes from switch bounce
+  - State verification after debounce period
+  - Callbacks for pick-up and hang-up events
+  - Thread-safe with Timer-based debouncing
+  - 12 tests all passing
+- **Total: 52 tests passing** (13 config + 11 dial reader + 12 hook monitor + 16 GPIO)
+- **Code Quality: pylint 10.00/10, mypy 0 errors**
 
 ## Project Architecture - Two Parts
 
@@ -71,109 +66,53 @@ Optional web interface that:
 
 ---
 
-## Immediate Next Steps - Phase 1: Foundation
+## Completed Phases
 
-### Goal
-Set up modern Python development environment with uv and testing framework for the core phone controller.
+### ✅ Phase 1: Foundation
+- [x] Initialize uv project with `uv init`
+- [x] Configure `pyproject.toml` with project metadata
+- [x] Set up Python version (3.11+)
+- [x] Add core dependencies (PyYAML, pytest)
+- [x] Add dev dependencies (black, mypy, pylint)
+- [x] Basic project structure
+- [x] Test framework with pytest
+- [x] Development workflow commands
+- [x] Basic .gitignore
 
-### Tasks
+### ✅ Phase 2: Configuration Management
+- [x] ConfigManager class
+- [x] Load/validate YAML config
+- [x] Tests for config loading
+- [x] Simplified configuration structure
 
-#### 1.1 Initialize uv Project
-- [ ] Initialize uv project with `uv init`
-- [ ] Configure `pyproject.toml` with project metadata
-- [ ] Set up Python version (3.11+)
-- [ ] Add core dependencies (PyYAML, pytest)
-- [ ] Add dev dependencies (black, mypy, pylint)
-- [ ] Note: GPIO libraries will be optional (mock-able for dev)
+### ✅ Phase 3: GPIO Abstraction Layer
+- [x] Abstract GPIO interface
+- [x] Mock GPIO implementation
+- [x] Explicit mock parameter (no auto-detection)
+- [x] Tests for both modes
+- [x] Pin constants (HOOK, DIAL_PULSE, etc.)
 
-#### 1.2 Basic Project Structure
-Create only what we need to start:
-```
-src/
-  rotary_phone/
-    __init__.py
-    main.py          # Entry point for phone controller
-tests/
-  __init__.py
-  test_main.py       # Basic test
-.gitignore
-pyproject.toml
-README.md
-```
+### ✅ Phase 4: Test Harness
+- [x] Simulation helpers for dial and hook
+- [x] Automated test scenarios
+- [x] Shared fixtures in conftest.py
+- [x] Test utilities in test_harness.py
 
-#### 1.3 Hello World Phone Controller
-- [ ] Create basic main.py that prints "Phone controller starting..."
-- [ ] Add command-line argument parsing (--debug, --mock-gpio)
-- [ ] Add proper logging setup
-- [ ] Make it runnable with `uv run python -m rotary_phone.main`
+### ✅ Phase 5: Dial Reader
+- [x] DialReader class with pulse counting
+- [x] Timer-based timeout detection
+- [x] Tests with mock GPIO
+- [x] Thread-safe implementation
 
-#### 1.4 Test Framework
-- [ ] Configure pytest in `pyproject.toml`
-- [ ] Create first test in `tests/test_main.py`
-- [ ] Verify tests run with `uv run pytest`
-- [ ] Add test coverage reporting
-
-#### 1.5 Development Workflow Commands
-- [ ] Add commands to `pyproject.toml` for:
-  - `uv run phone` - Start phone controller
-  - `uv run phone --mock-gpio` - Start with mock hardware
-  - `uv run test` - Run tests
-  - `uv run test-watch` - Run tests in watch mode
-  - `uv run format` - Format code with black
-  - `uv run lint` - Run linter
-  - `uv run typecheck` - Run mypy
-
-#### 1.6 Basic .gitignore
-- [ ] Create `.gitignore` for Python, uv, IDE files
-- [ ] Ignore config.yaml (contains secrets)
-- [ ] Ignore *.log files
-
-#### 1.7 First Commit
-- [ ] Commit foundation: "Initial project setup with uv and pytest"
-
-### Success Criteria
-- [ ] `uv run phone` starts the phone controller (even if it does nothing yet)
-- [ ] `uv run test` runs and passes basic tests
-- [ ] Can iterate quickly: change code → test → commit
-- [ ] Foundation ready for building hardware abstractions
+### ✅ Phase 6: Hook Monitor
+- [x] HookMonitor class
+- [x] Debouncing logic with Timer
+- [x] Tests with mock GPIO
+- [x] State change callbacks
 
 ---
 
 ## Next Phases (Core Phone Controller)
-
-After foundation, we'll build incrementally:
-
-### Phase 2: Configuration Management
-- [ ] ConfigManager class
-- [ ] Load/validate YAML config
-- [ ] Tests for config loading
-- [ ] Commit: "Add configuration management"
-
-### Phase 3: GPIO Abstraction Layer
-- [ ] Abstract GPIO interface
-- [ ] Mock GPIO implementation
-- [ ] Auto-detect real vs mock
-- [ ] Tests for both modes
-- [ ] Commit: "Add GPIO abstraction layer"
-
-### Phase 4: Test Harness
-- [ ] Interactive CLI for testing without hardware
-- [ ] Simulate dial pulses, hook states
-- [ ] Automated test scenarios
-- [ ] Commit: "Add interactive test harness"
-
-### Phase 5: Dial Reader
-- [ ] DialReader class with pulse counting
-- [ ] Background thread for timeout detection
-- [ ] Tests with mock GPIO
-- [ ] Test in harness
-- [ ] Commit: "Add dial reader component"
-
-### Phase 6: Hook Monitor
-- [ ] HookMonitor class
-- [ ] Debouncing logic
-- [ ] Tests
-- [ ] Commit: "Add hook monitor component"
 
 ### Phase 7: Ringer
 - [ ] Ringer class with audio playback
