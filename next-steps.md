@@ -1,20 +1,22 @@
 # Next Steps - Rotary Phone VoIP Project
 
 ## Current Status
-✅ **Phase 2 Complete**: Configuration management system is working (simplified)
+✅ **Phase 3 Complete**: GPIO abstraction layer is working
 
 Latest commits:
+- `81d174e` - Add GPIO abstraction layer for hardware independence
 - `168e05c` - Simplify configuration: remove GPIO pins, rename to allowlist
 - `da0ec54` - Add configuration management system
-- `1f298fb` - Add project documentation and planning files
 - `b3c0977` - Initial project setup with uv and pytest
 
 What works now:
-- YAML-based configuration with defaults and user overrides
-- Config validation with helpful error messages
-- Speed dial lookup and allowlist checking
-- Simplified config (no GPIO pins, uses "allowlist" terminology)
-- 13 tests all passing
+- YAML-based configuration with simplified structure
+- GPIO abstraction (MockGPIO + RealGPIO) for hardware independence
+- Auto-detection of GPIO type (mock on dev machines, real on Pi)
+- Pin constants defined (HOOK=17, DIAL_PULSE=27, etc.)
+- Full GPIO simulation for testing without hardware
+- Edge detection with callbacks
+- 30 tests all passing (13 config + 17 GPIO)
 
 ## Project Architecture - Two Parts
 
