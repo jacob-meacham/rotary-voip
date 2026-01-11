@@ -7,6 +7,7 @@ from typing import NoReturn
 
 from rotary_phone.config import ConfigManager
 from rotary_phone.config.config_manager import ConfigError
+from rotary_phone.hardware import get_gpio
 
 
 def setup_logging(debug: bool = False) -> None:
@@ -77,33 +78,33 @@ def main() -> NoReturn:
         if sip_config.get("server"):
             logger.info(f"SIP server: {sip_config['server']}")
         else:
-            logger.warning("No SIP server configured (required for real calls)")
+            logger.warning("No SIP server configured")
 
         speed_dial = config.get("speed_dial", {})
         logger.info(f"Speed dial entries: {len(speed_dial)}")
 
         allowlist = config.get("allowlist", [])
-        if "*" in allowlist:
-            logger.info("Allowlist: ALL numbers allowed")
-        else:
-            logger.info(f"Allowlist entries: {len(allowlist)}")
+        logger.info(f"Allowlist entries: {len(allowlist)}")
 
     except ConfigError as e:
         logger.error(f"Configuration error: {e}")
-        logger.error("Please check your config file and try again")
         sys.exit(1)
     except FileNotFoundError:
         logger.warning(f"Config file not found: {args.config}")
-        logger.info("Using default configuration only")
-        try:
-            config = ConfigManager()
-        except ConfigError as e:
-            logger.error(f"Default configuration is invalid: {e}")
-            sys.exit(1)
+        sys.exit(1)
+
+    # Initialize GPIO
+    try:
+        gpio = get_gpio(mock=args.mock_gpio)
+        logger.info("GPIO initialized successfully")
+    except Exception as e:
+        logger.error(f"Failed to initialize GPIO: {e}")
+        sys.exit(1)
 
     logger.info("Phone controller starting...")
 
-    # TODO: Initialize components with config
+    # TODO: Initialize hardware components with config and GPIO
+    # TODO: Initialize SIP client
     # TODO: Start main event loop
 
     logger.info("Phone controller is ready!")
@@ -117,7 +118,13 @@ def main() -> NoReturn:
             time.sleep(1)
     except KeyboardInterrupt:
         logger.info("\nShutting down...")
-        # TODO: Cleanup components
+        # Cleanup GPIO
+        try:
+            gpio.cleanup()
+            logger.info("GPIO cleaned up")
+        except Exception as e:
+            logger.warning(f"Error cleaning up GPIO: {e}")
+        # TODO: Cleanup other components
         logger.info("Goodbye!")
         sys.exit(0)
 
