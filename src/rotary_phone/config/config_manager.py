@@ -2,9 +2,11 @@
 
 import logging
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, TypeVar, Union
 
 import yaml
+
+T = TypeVar("T")
 
 
 logger = logging.getLogger(__name__)
@@ -12,8 +14,6 @@ logger = logging.getLogger(__name__)
 
 class ConfigError(Exception):
     """Raised when configuration is invalid."""
-
-    pass
 
 
 class ConfigManager:
@@ -50,15 +50,15 @@ class ConfigManager:
             ConfigError: If file cannot be read or parsed
         """
         try:
-            with open(path, "r") as f:
+            with open(path, "r", encoding="utf-8") as f:
                 content = yaml.safe_load(f)
                 return content if content is not None else {}
-        except FileNotFoundError:
-            raise ConfigError(f"Config file not found: {path}")
+        except FileNotFoundError as e:
+            raise ConfigError(f"Config file not found: {path}") from e
         except yaml.YAMLError as e:
-            raise ConfigError(f"Failed to parse YAML file {path}: {e}")
-        except Exception as e:
-            raise ConfigError(f"Failed to load config file {path}: {e}")
+            raise ConfigError(f"Failed to parse YAML file {path}: {e}") from e
+        except OSError as e:
+            raise ConfigError(f"Failed to load config file {path}: {e}") from e
 
     def _merge_configs(self, base: Dict[str, Any], override: Dict[str, Any]) -> Dict[str, Any]:
         """Recursively merge two configuration dictionaries.
@@ -136,18 +136,18 @@ class ConfigManager:
         """Load configuration from default and user files."""
         # Load default config
         default_path = self._get_default_config_path()
-        logger.debug(f"Loading default config from: {default_path}")
+        logger.debug("Loading default config from: %s", default_path)
         default_config = self._load_yaml_file(default_path)
 
         # Try to load user config if path provided
         if self._user_config_path:
             user_path = Path(self._user_config_path)
             if user_path.exists():
-                logger.info(f"Loading user config from: {user_path}")
+                logger.info("Loading user config from: %s", user_path)
                 user_config = self._load_yaml_file(user_path)
                 self._config = self._merge_configs(default_config, user_config)
             else:
-                logger.warning(f"User config file not found: {user_path}, using defaults only")
+                logger.warning("User config file not found: %s, using defaults only", user_path)
                 self._config = default_config
         else:
             self._config = default_config
@@ -156,7 +156,7 @@ class ConfigManager:
         self._validate_config()
         logger.info("Configuration loaded and validated successfully")
 
-    def get(self, key: str, default: Any = None) -> Any:
+    def get(self, key: str, default: Optional[T] = None) -> Union[Any, T]:
         """Get a configuration value by key.
 
         Supports dot notation for nested values (e.g., 'sip.server')
@@ -166,16 +166,16 @@ class ConfigManager:
             default: Default value if key not found
 
         Returns:
-            Configuration value or default
+            Configuration value or default (type matches default when provided)
         """
         keys = key.split(".")
-        value = self._config
+        value: Any = self._config
 
         for k in keys:
             if isinstance(value, dict) and k in value:
                 value = value[k]
             else:
-                return default
+                return default  # type: ignore[return-value]
 
         return value
 
@@ -188,7 +188,7 @@ class ConfigManager:
         Returns:
             Phone number or None if code not found
         """
-        speed_dial = self.get("speed_dial", {})
+        speed_dial: Dict[str, str] = self.get("speed_dial", {})
         return speed_dial.get(code)
 
     def is_allowed(self, number: str) -> bool:

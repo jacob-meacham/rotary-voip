@@ -54,22 +54,18 @@ class GPIO(ABC):
     @abstractmethod
     def setmode(self, mode: str) -> None:
         """Set the pin numbering mode (BCM or BOARD)."""
-        pass
 
     @abstractmethod
     def setup(self, pin: int, mode: PinMode, pull_up_down: PullMode = PullMode.OFF) -> None:
         """Set up a GPIO pin as input or output."""
-        pass
 
     @abstractmethod
     def input(self, pin: int) -> int:
         """Read the value of a GPIO pin."""
-        pass
 
     @abstractmethod
     def output(self, pin: int, value: int) -> None:
         """Set the value of a GPIO pin."""
-        pass
 
     @abstractmethod
     def add_event_detect(
@@ -80,25 +76,21 @@ class GPIO(ABC):
         bouncetime: int = 0,
     ) -> None:
         """Add edge detection to a pin."""
-        pass
 
     @abstractmethod
     def remove_event_detect(self, pin: int) -> None:
         """Remove edge detection from a pin."""
-        pass
 
     @abstractmethod
     def cleanup(self, pin: Optional[int] = None) -> None:
         """Clean up GPIO resources."""
-        pass
 
     @abstractmethod
     def setwarnings(self, enable: bool) -> None:
         """Enable or disable warnings."""
-        pass
 
 
-class MockGPIO(GPIO):
+class MockGPIO(GPIO):  # pylint: disable=too-many-instance-attributes
     """Mock GPIO implementation for testing without hardware."""
 
     def __init__(self) -> None:
@@ -119,7 +111,7 @@ class MockGPIO(GPIO):
         if mode not in (self.BCM, self.BOARD):
             raise ValueError(f"Invalid mode: {mode}")
         self._mode = mode
-        logger.debug(f"GPIO mode set to: {mode}")
+        logger.debug("GPIO mode set to: %s", mode)
 
     def setup(self, pin: int, mode: PinMode, pull_up_down: PullMode = PullMode.OFF) -> None:
         """Set up a GPIO pin."""
@@ -137,8 +129,11 @@ class MockGPIO(GPIO):
                     self._pin_values[pin] = self.LOW  # Default to LOW
 
             logger.debug(
-                f"Pin {pin} setup: mode={mode.name}, pull={pull_up_down.name}, "
-                f"value={self._pin_values.get(pin, 0)}"
+                "Pin %d setup: mode=%s, pull=%s, value=%d",
+                pin,
+                mode.name,
+                pull_up_down.name,
+                self._pin_values.get(pin, 0),
             )
 
     def input(self, pin: int) -> int:
@@ -148,7 +143,7 @@ class MockGPIO(GPIO):
                 raise RuntimeError(f"Pin {pin} not set up")
             if self._pin_modes[pin] != PinMode.IN:
                 if self._warnings_enabled:
-                    logger.warning(f"Reading from output pin {pin}")
+                    logger.warning("Reading from output pin %d", pin)
             return self._pin_values.get(pin, self.LOW)
 
     def output(self, pin: int, value: int) -> None:
@@ -162,7 +157,7 @@ class MockGPIO(GPIO):
             old_value = self._pin_values.get(pin, self.LOW)
             self._pin_values[pin] = value
 
-            logger.debug(f"Pin {pin} output: {old_value} -> {value}")
+            logger.debug("Pin %d output: %d -> %d", pin, old_value, value)
 
     def add_event_detect(
         self,
@@ -183,7 +178,7 @@ class MockGPIO(GPIO):
                 self._event_callbacks[pin] = callback
             self._last_values[pin] = self._pin_values.get(pin, self.LOW)
 
-            logger.debug(f"Event detect added: pin={pin}, edge={edge.name}")
+            logger.debug("Event detect added: pin=%d, edge=%s", pin, edge.name)
 
     def remove_event_detect(self, pin: int) -> None:
         """Remove edge detection from a pin."""
@@ -195,7 +190,7 @@ class MockGPIO(GPIO):
             if pin in self._last_values:
                 del self._last_values[pin]
 
-            logger.debug(f"Event detect removed from pin {pin}")
+            logger.debug("Event detect removed from pin %d", pin)
 
     def cleanup(self, pin: Optional[int] = None) -> None:
         """Clean up GPIO resources."""
@@ -217,7 +212,7 @@ class MockGPIO(GPIO):
                 self._event_callbacks.pop(pin, None)
                 self._event_edges.pop(pin, None)
                 self._last_values.pop(pin, None)
-                logger.debug(f"Pin {pin} cleaned up")
+                logger.debug("Pin %d cleaned up", pin)
 
     def setwarnings(self, enable: bool) -> None:
         """Enable or disable warnings."""
@@ -240,6 +235,7 @@ class MockGPIO(GPIO):
             self._pin_values[pin] = value
 
             # Trigger edge detection callback if registered
+            callback_to_call = None
             if pin in self._event_edges and pin in self._event_callbacks:
                 last_value = self._last_values.get(pin, old_value)
                 edge = self._event_edges[pin]
@@ -254,13 +250,15 @@ class MockGPIO(GPIO):
                     trigger = True
 
                 if trigger:
-                    callback = self._event_callbacks[pin]
-                    # Call callback outside of lock to avoid deadlock
-                    threading.Thread(target=callback, args=(pin,), daemon=True).start()
+                    callback_to_call = self._event_callbacks[pin]
 
                 self._last_values[pin] = value
 
-            logger.debug(f"Mock input: pin={pin}, value={value}, triggered edge detect")
+        # Call callback outside of lock to avoid deadlock
+        if callback_to_call is not None:
+            callback_to_call(pin)
+
+            logger.debug("Mock input: pin=%d, value=%d, triggered edge detect", pin, value)
 
     def get_pin_state(self, pin: int) -> Dict[str, Any]:
         """Get the current state of a pin (for testing)."""
@@ -279,12 +277,12 @@ class RealGPIO(GPIO):
     def __init__(self) -> None:
         """Initialize real GPIO using RPi.GPIO."""
         try:
-            import RPi.GPIO as gpio  # type: ignore
+            import RPi.GPIO as gpio  # type: ignore  # pylint: disable=import-outside-toplevel
 
             self._gpio = gpio
             logger.info("Real GPIO initialized using RPi.GPIO")
-        except ImportError:
-            raise RuntimeError("RPi.GPIO not available. Install it or use mock GPIO mode.")
+        except ImportError as e:
+            raise RuntimeError("RPi.GPIO not available. Install it or use mock GPIO mode.") from e
 
     def setmode(self, mode: str) -> None:
         """Set the pin numbering mode."""
@@ -298,7 +296,8 @@ class RealGPIO(GPIO):
 
     def input(self, pin: int) -> int:
         """Read the value of a GPIO pin."""
-        return self._gpio.input(pin)
+        result: int = self._gpio.input(pin)
+        return result
 
     def output(self, pin: int, value: int) -> None:
         """Set the value of a GPIO pin."""
@@ -348,7 +347,7 @@ def get_gpio(mock: Optional[bool] = None) -> GPIO:
         else:
             # Try to import RPi.GPIO - if it fails, use mock
             try:
-                import RPi.GPIO  # type: ignore  # noqa: F401
+                import RPi.GPIO  # type: ignore  # noqa: F401  # pylint: disable=import-outside-toplevel,unused-import
 
                 mock = False
                 logger.info("Auto-detected: Using real GPIO (RPi.GPIO available)")
@@ -358,5 +357,4 @@ def get_gpio(mock: Optional[bool] = None) -> GPIO:
 
     if mock:
         return MockGPIO()
-    else:
-        return RealGPIO()
+    return RealGPIO()

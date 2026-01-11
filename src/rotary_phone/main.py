@@ -3,6 +3,7 @@
 import argparse
 import logging
 import sys
+import time
 from typing import NoReturn
 
 from rotary_phone.config import ConfigManager
@@ -63,47 +64,44 @@ def main() -> NoReturn:
     logger.info("=" * 60)
 
     if args.mock_gpio:
-        logger.info("Running in MOCK GPIO mode (no hardware required)")
+        logger.info("Running in MOCK mode (no hardware required)")
     else:
-        logger.info("Running in REAL GPIO mode")
+        logger.info("Running with REAL hardware")
 
     # Load configuration
     try:
-        logger.info(f"Loading configuration from: {args.config}")
+        logger.info("Loading configuration from: %s", args.config)
         config = ConfigManager(user_config_path=args.config)
         logger.info("Configuration loaded successfully")
 
         # Log some key config info
         sip_config = config.get_sip_config()
         if sip_config.get("server"):
-            logger.info(f"SIP server: {sip_config['server']}")
+            logger.info("SIP server: %s", sip_config["server"])
         else:
             logger.warning("No SIP server configured")
 
-        speed_dial = config.get("speed_dial", {})
-        logger.info(f"Speed dial entries: {len(speed_dial)}")
+        speed_dial: dict[str, str] = config.get("speed_dial", {})
+        logger.info("Speed dial entries: %d", len(speed_dial))
 
-        allowlist = config.get("allowlist", [])
-        logger.info(f"Allowlist entries: {len(allowlist)}")
+        allowlist: list[str] = config.get("allowlist", [])
+        logger.info("Allowlist entries: %d", len(allowlist))
 
     except ConfigError as e:
-        logger.error(f"Configuration error: {e}")
-        sys.exit(1)
-    except FileNotFoundError:
-        logger.warning(f"Config file not found: {args.config}")
+        logger.error("Configuration error: %s", e)
         sys.exit(1)
 
-    # Initialize GPIO
+    # Initialize hardware interface
     try:
-        gpio = get_gpio(mock=args.mock_gpio)
-        logger.info("GPIO initialized successfully")
-    except Exception as e:
-        logger.error(f"Failed to initialize GPIO: {e}")
+        hardware = get_gpio(mock=args.mock_gpio)
+        logger.info("Hardware interface initialized successfully")
+    except RuntimeError as e:
+        logger.error("Failed to initialize hardware interface: %s", e)
         sys.exit(1)
 
     logger.info("Phone controller starting...")
 
-    # TODO: Initialize hardware components with config and GPIO
+    # TODO: Initialize hardware components with config and hardware interface
     # TODO: Initialize SIP client
     # TODO: Start main event loop
 
@@ -112,18 +110,16 @@ def main() -> NoReturn:
 
     try:
         # Main loop - will be replaced with actual phone controller
-        import time
-
         while True:
             time.sleep(1)
     except KeyboardInterrupt:
         logger.info("\nShutting down...")
-        # Cleanup GPIO
+        # Cleanup hardware
         try:
-            gpio.cleanup()
-            logger.info("GPIO cleaned up")
-        except Exception as e:
-            logger.warning(f"Error cleaning up GPIO: {e}")
+            hardware.cleanup()
+            logger.info("Hardware cleaned up")
+        except RuntimeError as e:
+            logger.warning("Error cleaning up hardware: %s", e)
         # TODO: Cleanup other components
         logger.info("Goodbye!")
         sys.exit(0)

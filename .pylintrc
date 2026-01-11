@@ -1,0 +1,23 @@
+[MAIN]
+# Use multiple processes to speed up Pylint
+jobs=0
+
+[MESSAGES CONTROL]
+# Disable TODO/FIXME warnings - these are intentional markers
+disable=fixme
+
+[FORMAT]
+# Maximum number of characters on a single line
+max-line-length=100
+
+[BASIC]
+# Good variable names which should always be accepted
+good-names=i,j,k,e,f,_,logger
+
+[DESIGN]
+# Maximum number of arguments for function / method
+max-args=7
+# Maximum number of attributes for a class
+max-attributes=10
+# Maximum number of boolean expressions in an if statement
+max-bool-expr=5
