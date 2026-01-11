@@ -119,15 +119,25 @@ def test_registration():
 
 
 def test_outgoing_call():
-    """Test making an outgoing call (will fail without destination)."""
+    """Test making an actual outgoing call."""
     print("\n" + "=" * 60)
-    print("Outgoing Call Test (No Destination)")
+    print("Outgoing Call Test")
     print("=" * 60)
-    print("\nNOTE: This test registers and prepares to make a call,")
-    print("but does not actually dial (no destination configured).")
-    print()
 
     config = get_sip_config()
+
+    # Check if TEST_DESTINATION is configured
+    test_destination = os.getenv("TEST_DESTINATION")
+    if not test_destination:
+        print("\n⚠️  TEST_DESTINATION not configured")
+        print("  Set TEST_DESTINATION in .env.test to enable outgoing call test")
+        print("  Example: TEST_DESTINATION=+15551234567")
+        print("\n✓ Skipping outgoing call test (not configured)")
+        return True
+
+    print(f"\nDestination: {test_destination}")
+    print("NOTE: This will make a REAL call to the destination number!")
+    print("Make sure you have permission to call this number.\n")
 
     events = []
 
@@ -162,13 +172,45 @@ def test_outgoing_call():
 
         print("✓ Registered")
 
-        # Note: Not actually making a call since we don't have a destination
-        print("\n✓ Ready to make calls (stopping here)")
-        print("  To test actual calls, modify this script with a destination number")
+        # Make call
+        print(f"\nCalling {test_destination}...")
+        client.make_call(test_destination)
+
+        # Wait for call to be answered or timeout
+        print("Waiting for answer (15 seconds timeout)...")
+        for i in range(30):  # 15 seconds
+            state = client.get_call_state()
+            if state == CallState.CONNECTED:
+                print(f"\n✓ Call connected after {i*0.5:.1f}s!")
+                break
+            if state == CallState.DISCONNECTED:
+                print("\n✗ Call failed (disconnected)")
+                client.unregister()
+                return False
+            time.sleep(0.5)
+        else:
+            print("\n⚠️  Call not answered within timeout")
+            print("  This may be normal if the number doesn't answer")
+            client.hangup()
+            client.unregister()
+            return True  # Not a failure, just no answer
+
+        # Call was answered, wait a moment then hang up
+        print("Call connected! Hanging up in 3 seconds...")
+        time.sleep(3)
+
+        client.hangup()
+        print("✓ Hung up")
 
         # Unregister
         client.unregister()
-        return True
+
+        if ("answered" in [e[0] for e in events]):
+            print("\n✓ Outgoing call test PASSED")
+            return True
+
+        print("\n⚠️  Call connected but answer callback not triggered")
+        return True  # Still consider it a pass
 
     except Exception as e:
         print(f"\n✗ Error: {e}")

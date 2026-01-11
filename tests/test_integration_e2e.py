@@ -5,6 +5,9 @@ These tests verify that all components work together correctly:
 - Hardware components (HookMonitor, DialReader, Ringer)
 - SIP client (InMemorySIPClient for testing)
 - Configuration and allowlist logic
+
+Focus: Critical user flows and component integration.
+Edge cases and unit-level behavior are tested in component-specific test files.
 """
 
 import time
@@ -257,52 +260,6 @@ def test_speed_dial_expansion(phone_system):
     config.get_speed_dial.assert_called_with("11")
 
 
-def test_hang_up_during_dialing(phone_system):
-    """Test hanging up while dialing cancels the call."""
-    manager = phone_system["call_manager"]
-    gpio = phone_system["gpio"]
-    sip_client = phone_system["sip_client"]
-
-    # Pick up and start dialing
-    simulate_hook_off(gpio)
-    time.sleep(0.05)
-
-    simulate_dial_digit(gpio, "5")
-    simulate_dial_digit(gpio, "5")
-    time.sleep(0.1)
-
-    assert manager.get_state() == PhoneState.DIALING
-    assert manager.get_dialed_number() == "55"
-
-    # Hang up while dialing
-    simulate_hook_on(gpio)
-    time.sleep(0.05)
-
-    # Should cancel and go back to idle
-    assert manager.get_state() == PhoneState.IDLE
-    assert manager.get_dialed_number() == ""
-    assert sip_client.get_call_state() == CallState.REGISTERED  # Still registered after call
-
-
-def test_incoming_call_ignored_when_busy(phone_system):
-    """Test that incoming calls are ignored when phone is off-hook."""
-    manager = phone_system["call_manager"]
-    gpio = phone_system["gpio"]
-    sip_client = phone_system["sip_client"]
-    ringer = phone_system["ringer"]
-
-    # Pick up phone
-    simulate_hook_off(gpio)
-    time.sleep(0.05)
-    assert manager.get_state() == PhoneState.OFF_HOOK_WAITING
-
-    # Try to receive incoming call
-    sip_client.simulate_incoming_call("5551234567")
-    time.sleep(0.05)
-
-    # Should ignore and stay in OFF_HOOK_WAITING
-    assert manager.get_state() == PhoneState.OFF_HOOK_WAITING
-    assert not ringer.is_ringing()
 
 
 def test_call_ended_remotely(phone_system):
@@ -337,26 +294,6 @@ def test_call_ended_remotely(phone_system):
     assert manager.get_state() == PhoneState.IDLE
 
 
-def test_ringer_stops_on_missed_call(phone_system):
-    """Test that ringer stops when hanging up during incoming call."""
-    manager = phone_system["call_manager"]
-    gpio = phone_system["gpio"]
-    sip_client = phone_system["sip_client"]
-    ringer = phone_system["ringer"]
-
-    # Incoming call
-    sip_client.simulate_incoming_call("5551234567")
-    time.sleep(0.05)
-    assert manager.get_state() == PhoneState.RINGING
-    assert ringer.is_ringing()
-
-    # Don't answer, let it ring, then call ends
-    sip_client.simulate_call_ended()
-    time.sleep(0.05)
-
-    # Ringer should stop
-    assert not ringer.is_ringing()
-    assert manager.get_state() == PhoneState.IDLE
 
 
 def test_multiple_sequential_calls(phone_system):
@@ -399,29 +336,3 @@ def test_multiple_sequential_calls(phone_system):
     assert manager.get_state() == PhoneState.IDLE
 
 
-def test_system_startup_state(phone_system):
-    """Test that system starts in correct state."""
-    manager = phone_system["call_manager"]
-    gpio = phone_system["gpio"]
-    hook_monitor = phone_system["hook_monitor"]
-    ringer = phone_system["ringer"]
-
-    # Should start idle
-    assert manager.get_state() == PhoneState.IDLE
-    assert hook_monitor.get_state() == HookState.ON_HOOK
-    assert not ringer.is_ringing()
-
-    # GPIO pins should be initialized
-    assert gpio._pin_modes.get(HOOK) == MockGPIO.IN
-    assert gpio._pin_modes.get(DIAL_PULSE) == MockGPIO.IN
-    assert gpio._pin_modes.get(RINGER) == MockGPIO.OUT
-    assert gpio._pin_values.get(RINGER) == MockGPIO.LOW  # Ringer off
-
-
-@pytest.mark.integration
-def test_timing_configuration(phone_system, test_config):
-    """Test that timing configuration is properly applied."""
-    manager = phone_system["call_manager"]
-
-    # Verify inter-digit timeout was configured
-    assert manager._inter_digit_timeout == 0.5  # From test_config
