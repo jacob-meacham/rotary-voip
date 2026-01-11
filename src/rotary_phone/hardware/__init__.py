@@ -2,6 +2,7 @@
 
 from .dial_reader import DialReader
 from .gpio_abstraction import GPIO, get_gpio
+from .hook_monitor import HookMonitor, HookState
 from .pins import DIAL_ACTIVE, DIAL_PULSE, HOOK, RINGER
 
 __all__ = [
@@ -12,4 +13,6 @@ __all__ = [
     "DIAL_ACTIVE",
     "RINGER",
     "DialReader",
+    "HookMonitor",
+    "HookState",
 ]

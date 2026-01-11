@@ -18,7 +18,7 @@
 
 ---
 
-✅ **Phase 4 Complete**: DialReader with automated test harness is working
+✅ **Phase 5 Complete**: HookMonitor with debouncing is working
 
 Latest commits:
 - `81d174e` - Add GPIO abstraction layer for hardware independence
@@ -36,11 +36,18 @@ What works now:
   - Counts pulses with timeout-based digit completion
   - Thread-safe pulse handling
   - Proper mapping (1 pulse = 1, 10 pulses = 0)
+- **HookMonitor component** - Detects phone on-hook/off-hook state changes
+  - Debouncing to prevent spurious state changes from switch bounce
+  - State verification after debounce period
+  - Callbacks for pick-up and hang-up events
+  - Thread-safe with Timer-based debouncing
 - **Automated test harness** - Simulation helpers for testing real logic
   - simulate_pulse() - Generate single pulse
   - simulate_dial_digit() - Dial digit with proper timing
   - simulate_dial_number() - Dial full phone numbers
-- 40 tests all passing (13 config + 11 dial reader + 16 GPIO)
+  - simulate_pick_up() / simulate_hang_up() - Hook state changes
+  - simulate_hook_bounce() - Mechanical switch bounce
+- 52 tests all passing (13 config + 11 dial reader + 12 hook monitor + 16 GPIO)
 
 ## Project Architecture - Two Parts
 

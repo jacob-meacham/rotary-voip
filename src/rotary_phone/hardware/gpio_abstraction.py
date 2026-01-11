@@ -118,8 +118,9 @@ class MockGPIO(GPIO):  # pylint: disable=too-many-instance-attributes
             self._pin_modes[pin] = mode
             self._pin_pulls[pin] = pull_up_down
 
-            # Initialize pin value based on pull resistor
-            if mode == PinMode.IN:
+            # Initialize pin value based on pull resistor, but only if not already set
+            # This allows tests to set initial state before setup
+            if mode == PinMode.IN and pin not in self._pin_values:
                 if pull_up_down == PullMode.UP:
                     self._pin_values[pin] = self.HIGH
                 elif pull_up_down == PullMode.DOWN:
