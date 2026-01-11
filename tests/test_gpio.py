@@ -9,14 +9,8 @@ from rotary_phone.hardware import DIAL_ACTIVE, DIAL_PULSE, GPIO, HOOK, RINGER, g
 from rotary_phone.hardware.gpio_abstraction import MockGPIO
 
 
-def test_get_gpio_returns_mock_by_default() -> None:
-    """Test that get_gpio returns MockGPIO when auto-detecting."""
-    gpio = get_gpio()
-    assert isinstance(gpio, MockGPIO)
-
-
-def test_get_gpio_explicit_mock() -> None:
-    """Test that get_gpio returns MockGPIO when explicitly requested."""
+def test_get_gpio_mock() -> None:
+    """Test that get_gpio returns MockGPIO when requested."""
     gpio = get_gpio(mock=True)
     assert isinstance(gpio, MockGPIO)
 

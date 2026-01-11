@@ -330,31 +330,15 @@ class RealGPIO(GPIO):
         self._gpio.setwarnings(enable)
 
 
-def get_gpio(mock: Optional[bool] = None) -> GPIO:
+def get_gpio(mock: bool) -> GPIO:
     """Get the appropriate GPIO implementation.
 
     Args:
-        mock: If True, force mock GPIO. If False, force real GPIO.
-              If None, auto-detect based on environment and platform.
+        mock: If True, use mock GPIO. If False, use real GPIO.
 
     Returns:
         GPIO implementation (MockGPIO or RealGPIO)
     """
-    if mock is None:
-        # Auto-detect: check environment variable first
-        if os.getenv("MOCK_GPIO", "").lower() in ("1", "true", "yes"):
-            mock = True
-        else:
-            # Try to import RPi.GPIO - if it fails, use mock
-            try:
-                import RPi.GPIO  # type: ignore  # noqa: F401  # pylint: disable=import-outside-toplevel,unused-import
-
-                mock = False
-                logger.info("Auto-detected: Using real GPIO (RPi.GPIO available)")
-            except ImportError:
-                mock = True
-                logger.info("Auto-detected: Using mock GPIO (RPi.GPIO not available)")
-
     if mock:
         return MockGPIO()
     return RealGPIO()
