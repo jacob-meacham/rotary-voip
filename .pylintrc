@@ -4,7 +4,11 @@ jobs=0
 
 [MESSAGES CONTROL]
 # Disable TODO/FIXME warnings - these are intentional markers
-disable=fixme
+# Disable test-specific warnings
+disable=fixme,
+    redefined-outer-name,  # pytest fixtures redefine names
+    unnecessary-lambda,    # lambdas used for callbacks in tests
+    broad-exception-caught  # acceptable in tests
 
 [FORMAT]
 # Maximum number of characters on a single line

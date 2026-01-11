@@ -1,80 +1,13 @@
-"""Tests for rotary dial reader with simulation helpers."""
+"""Tests for rotary dial reader component."""
 
 import time
 from typing import List
 
 import pytest
 
-from rotary_phone.hardware import DIAL_PULSE, get_gpio
 from rotary_phone.hardware.dial_reader import DialReader
-from rotary_phone.hardware.gpio_abstraction import GPIO, MockGPIO
-
-
-# Test Harness Helpers
-
-
-def simulate_pulse(gpio: MockGPIO) -> None:
-    """Simulate a single dial pulse (falling edge on DIAL_PULSE pin).
-
-    Args:
-        gpio: MockGPIO instance to simulate on
-    """
-    # Dial pulse is a falling edge (HIGH -> LOW -> HIGH)
-    # The DialReader only cares about falling edges
-    gpio.set_input(DIAL_PULSE, GPIO.LOW)
-    time.sleep(0.01)  # Brief pulse
-    gpio.set_input(DIAL_PULSE, GPIO.HIGH)
-
-
-def simulate_dial_digit(gpio: MockGPIO, digit: str, pulse_gap: float = 0.06) -> None:
-    """Simulate dialing a single digit on a rotary phone.
-
-    Args:
-        gpio: MockGPIO instance to simulate on
-        digit: Digit to dial ('0'-'9')
-        pulse_gap: Seconds between pulses (default 60ms, realistic for rotary dial)
-    """
-    # Map digit to pulse count (0 = 10 pulses, 1 = 1 pulse, etc.)
-    pulse_count = 10 if digit == "0" else int(digit)
-
-    for i in range(pulse_count):
-        simulate_pulse(gpio)
-        if i < pulse_count - 1:  # Don't wait after last pulse
-            time.sleep(pulse_gap)
-
-
-def simulate_dial_number(
-    gpio: MockGPIO,
-    number: str,
-    pulse_gap: float = 0.06,
-    digit_gap: float = 0.5,
-) -> None:
-    """Simulate dialing a complete phone number.
-
-    Args:
-        gpio: MockGPIO instance to simulate on
-        number: Phone number to dial (string of digits)
-        pulse_gap: Seconds between pulses within a digit
-        digit_gap: Seconds between digits
-    """
-    for i, digit in enumerate(number):
-        if not digit.isdigit():
-            continue
-        simulate_dial_digit(gpio, digit, pulse_gap)
-        if i < len(number) - 1:  # Don't wait after last digit
-            time.sleep(digit_gap)
-
-
-# Fixtures
-
-
-@pytest.fixture
-def mock_gpio() -> MockGPIO:
-    """Provide a MockGPIO instance for tests."""
-    gpio = get_gpio(mock=True)
-    gpio.setmode(GPIO.BCM)
-    assert isinstance(gpio, MockGPIO)
-    return gpio
+from rotary_phone.hardware.gpio_abstraction import MockGPIO
+from tests.test_harness import simulate_dial_digit, simulate_dial_number, simulate_pulse
 
 
 @pytest.fixture
@@ -87,7 +20,7 @@ def collected_digits() -> List[str]:
 
 
 def test_dial_reader_single_digit_1(mock_gpio: MockGPIO, collected_digits: List[str]) -> None:
-    """Test detecting digit 1 (1 pulse)."""
+    """Test digit 1 detection (1 pulse)."""
     reader = DialReader(
         gpio=mock_gpio,
         pulse_timeout=0.3,
@@ -104,7 +37,7 @@ def test_dial_reader_single_digit_1(mock_gpio: MockGPIO, collected_digits: List[
 
 
 def test_dial_reader_single_digit_5(mock_gpio: MockGPIO, collected_digits: List[str]) -> None:
-    """Test detecting digit 5 (5 pulses)."""
+    """Test digit 5 detection (5 pulses)."""
     reader = DialReader(
         gpio=mock_gpio,
         pulse_timeout=0.3,
@@ -121,7 +54,7 @@ def test_dial_reader_single_digit_5(mock_gpio: MockGPIO, collected_digits: List[
 
 
 def test_dial_reader_single_digit_0(mock_gpio: MockGPIO, collected_digits: List[str]) -> None:
-    """Test detecting digit 0 (10 pulses)."""
+    """Test digit 0 detection (10 pulses)."""
     reader = DialReader(
         gpio=mock_gpio,
         pulse_timeout=0.3,
@@ -138,7 +71,7 @@ def test_dial_reader_single_digit_0(mock_gpio: MockGPIO, collected_digits: List[
 
 
 def test_dial_reader_all_digits(mock_gpio: MockGPIO, collected_digits: List[str]) -> None:
-    """Test detecting all digits 0-9."""
+    """Test all digits 0-9 in sequence."""
     reader = DialReader(
         gpio=mock_gpio,
         pulse_timeout=0.3,
@@ -157,7 +90,7 @@ def test_dial_reader_all_digits(mock_gpio: MockGPIO, collected_digits: List[str]
 
 
 def test_dial_reader_phone_number(mock_gpio: MockGPIO, collected_digits: List[str]) -> None:
-    """Test dialing a complete phone number."""
+    """Test complete phone number dialing."""
     reader = DialReader(
         gpio=mock_gpio,
         pulse_timeout=0.3,
@@ -191,7 +124,7 @@ def test_dial_reader_emergency_number(mock_gpio: MockGPIO, collected_digits: Lis
 
 
 def test_dial_reader_rapid_pulses(mock_gpio: MockGPIO, collected_digits: List[str]) -> None:
-    """Test handling rapid pulses (faster than normal dialing)."""
+    """Test rapid pulse handling (faster than normal)."""
     reader = DialReader(
         gpio=mock_gpio,
         pulse_timeout=0.3,
@@ -209,7 +142,7 @@ def test_dial_reader_rapid_pulses(mock_gpio: MockGPIO, collected_digits: List[st
 
 
 def test_dial_reader_slow_pulses(mock_gpio: MockGPIO, collected_digits: List[str]) -> None:
-    """Test handling slow pulses (slower than normal dialing)."""
+    """Test slow pulse handling (slower than normal)."""
     reader = DialReader(
         gpio=mock_gpio,
         pulse_timeout=0.3,
@@ -227,7 +160,7 @@ def test_dial_reader_slow_pulses(mock_gpio: MockGPIO, collected_digits: List[str
 
 
 def test_dial_reader_partial_dial_timeout(mock_gpio: MockGPIO, collected_digits: List[str]) -> None:
-    """Test that partial pulse sequences timeout correctly."""
+    """Test partial pulse sequence timeout behavior."""
     reader = DialReader(
         gpio=mock_gpio,
         pulse_timeout=0.2,  # Shorter timeout
@@ -248,7 +181,7 @@ def test_dial_reader_partial_dial_timeout(mock_gpio: MockGPIO, collected_digits:
 
 
 def test_dial_reader_no_pulses(mock_gpio: MockGPIO, collected_digits: List[str]) -> None:
-    """Test that no digits are detected when no pulses occur."""
+    """Test no detection when no pulses occur."""
     reader = DialReader(
         gpio=mock_gpio,
         pulse_timeout=0.3,
@@ -266,7 +199,7 @@ def test_dial_reader_no_pulses(mock_gpio: MockGPIO, collected_digits: List[str])
 def test_dial_reader_start_stop_multiple_times(
     mock_gpio: MockGPIO, collected_digits: List[str]
 ) -> None:
-    """Test starting and stopping the reader multiple times."""
+    """Test multiple start/stop cycles."""
     reader = DialReader(
         gpio=mock_gpio,
         pulse_timeout=0.3,
