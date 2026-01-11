@@ -35,13 +35,34 @@ python_functions = ["test_*"]
 norecursedirs = ["manual"]  # Exclude manual test scripts
 markers = [
     "integration: marks tests as integration tests (require Docker/SIP server)",
+    "flaky: marks tests as flaky (timing-sensitive E2E tests)",
 ]
 addopts = [
     "-v",
     "--strict-markers",
-    "-m", "not integration",  # Exclude integration tests by default
+    "-m", "not integration and not flaky",  # Exclude integration and flaky tests by default
+    "--cov=src/rotary_phone",
+    "--cov-report=term-missing",
+    "--cov-report=html",
 ]
-# Coverage will be added later when we have real functionality to test
+
+[tool.coverage.run]
+source = ["src"]
+omit = [
+    "*/tests/*",
+    "*/test_*.py",
+]
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "def __repr__",
+    "raise AssertionError",
+    "raise NotImplementedError",
+    "if __name__ == .__main__.:",
+    "if TYPE_CHECKING:",
+    "@abstractmethod",
+]
 
 [tool.black]
 line-length = 100

@@ -4,7 +4,7 @@
 set -e
 
 echo "Starting SIPp test server..."
-docker-compose -f docker-compose.test.yml up -d
+docker compose -f docker-compose.test.yml up -d
 
 # Wait for SIPp to be ready
 echo "Waiting for SIPp server to start..."
@@ -14,6 +14,6 @@ echo "Running integration tests..."
 uv run pytest tests/test_sip_integration.py -v "$@"
 
 echo "Stopping SIPp test server..."
-docker-compose -f docker-compose.test.yml down
+docker compose -f docker-compose.test.yml down
 
 echo "Integration tests complete!"
