@@ -11,7 +11,7 @@ echo "Waiting for SIPp server to start..."
 sleep 3
 
 echo "Running integration tests..."
-uv run pytest tests/test_sip_integration.py -v "$@"
+uv run pytest tests/test_sip_integration.py -v -m integration "$@"
 
 echo "Stopping SIPp test server..."
 docker compose -f docker-compose.test.yml down
