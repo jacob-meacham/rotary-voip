@@ -127,6 +127,7 @@ class HookMonitor:
             # Start new debounce timer
             self._pending_state = new_state
             self._debounce_timer = threading.Timer(self._debounce_time, self._on_debounce_complete)
+            self._debounce_timer.daemon = True
             self._debounce_timer.start()
 
             logger.debug(

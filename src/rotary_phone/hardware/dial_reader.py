@@ -101,6 +101,7 @@ class DialReader:
 
             # Start new timer to detect end of pulse sequence
             self._timer = threading.Timer(self._pulse_timeout, self._on_timeout)
+            self._timer.daemon = True
             self._timer.start()
 
     def _on_timeout(self) -> None:

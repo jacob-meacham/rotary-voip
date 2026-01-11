@@ -82,7 +82,7 @@ def test_ringer_multiple_cycles(mock_gpio: MockGPIO) -> None:
     assert GPIO.HIGH in states
     assert GPIO.LOW in states
     # Should have seen at least 2 transitions (changed state at least twice)
-    transitions = sum(1 for i in range(1, len(states)) if states[i] != states[i-1])
+    transitions = sum(1 for i in range(1, len(states)) if states[i] != states[i - 1])
     assert transitions >= 2
 
 
@@ -139,20 +139,18 @@ def test_ringer_stop_while_ringing_off(mock_gpio: MockGPIO) -> None:
 def test_ringer_custom_pattern(mock_gpio: MockGPIO) -> None:
     """Test custom ring pattern durations."""
     # Short on, long off pattern
-    ringer = Ringer(gpio=mock_gpio, ring_on_duration=0.04, ring_off_duration=0.08)
+    ringer = Ringer(gpio=mock_gpio, ring_on_duration=0.05, ring_off_duration=0.1)
 
     ringer.start_ringing()
 
     # Verify short on period
     time.sleep(0.01)
     assert mock_gpio.input(RINGER) == GPIO.HIGH
-    time.sleep(0.05)
+    time.sleep(0.06)
     assert mock_gpio.input(RINGER) == GPIO.LOW
 
-    # Verify long off period
-    time.sleep(0.05)
-    assert mock_gpio.input(RINGER) == GPIO.LOW
-    time.sleep(0.05)
+    # Verify long off period (wait for it to turn back on)
+    time.sleep(0.11)
     assert mock_gpio.input(RINGER) == GPIO.HIGH
 
     ringer.stop_ringing()

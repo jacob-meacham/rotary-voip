@@ -104,6 +104,7 @@ class Ringer:
 
             # Schedule transition to off phase
             self._timer = threading.Timer(self._ring_on_duration, self._start_silent_cycle)
+            self._timer.daemon = True
             self._timer.start()
 
     def _start_silent_cycle(self) -> None:
@@ -118,4 +119,5 @@ class Ringer:
 
             # Schedule transition to on phase
             self._timer = threading.Timer(self._ring_off_duration, self._start_ring_cycle)
+            self._timer.daemon = True
             self._timer.start()
