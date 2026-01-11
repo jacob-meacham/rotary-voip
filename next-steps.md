@@ -1,9 +1,10 @@
 # Next Steps - Rotary Phone VoIP Project
 
 ## Current Status
-✅ **Phase 2 Complete**: Configuration management system is working
+✅ **Phase 2 Complete**: Configuration management system is working (simplified)
 
 Latest commits:
+- `168e05c` - Simplify configuration: remove GPIO pins, rename to allowlist
 - `da0ec54` - Add configuration management system
 - `1f298fb` - Add project documentation and planning files
 - `b3c0977` - Initial project setup with uv and pytest
@@ -11,7 +12,8 @@ Latest commits:
 What works now:
 - YAML-based configuration with defaults and user overrides
 - Config validation with helpful error messages
-- Speed dial lookup and whitelist checking
+- Speed dial lookup and allowlist checking
+- Simplified config (no GPIO pins, uses "allowlist" terminology)
 - 13 tests all passing
 
 ## Project Architecture - Two Parts
