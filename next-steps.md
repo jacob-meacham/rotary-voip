@@ -18,7 +18,7 @@
 
 ---
 
-✅ **Phase 3 Complete**: GPIO abstraction layer is working
+✅ **Phase 4 Complete**: DialReader with automated test harness is working
 
 Latest commits:
 - `81d174e` - Add GPIO abstraction layer for hardware independence
@@ -29,11 +29,18 @@ Latest commits:
 What works now:
 - YAML-based configuration with simplified structure
 - GPIO abstraction (MockGPIO + RealGPIO) for hardware independence
-- Auto-detection of GPIO type (mock on dev machines, real on Pi)
 - Pin constants defined (HOOK=17, DIAL_PULSE=27, etc.)
 - Full GPIO simulation for testing without hardware
 - Edge detection with callbacks
-- 30 tests all passing (13 config + 17 GPIO)
+- **DialReader component** - Reads rotary dial pulses and detects digits
+  - Counts pulses with timeout-based digit completion
+  - Thread-safe pulse handling
+  - Proper mapping (1 pulse = 1, 10 pulses = 0)
+- **Automated test harness** - Simulation helpers for testing real logic
+  - simulate_pulse() - Generate single pulse
+  - simulate_dial_digit() - Dial digit with proper timing
+  - simulate_dial_number() - Dial full phone numbers
+- 40 tests all passing (13 config + 11 dial reader + 16 GPIO)
 
 ## Project Architecture - Two Parts
 
