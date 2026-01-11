@@ -224,3 +224,42 @@ class InMemorySIPClient(SIPClient):
             if self._current_call_caller:
                 return self._current_call_caller
             return None
+
+    def simulate_call_answered(self) -> None:
+        """Simulate the remote party answering the call (for testing)."""
+        with self._lock:
+            if self._call_state != CallState.CALLING:
+                logger.warning(
+                    "Cannot answer call in state: %s (must be CALLING)",
+                    self._call_state.value,
+                )
+                return
+
+            self._set_call_state(CallState.CONNECTED)
+            logger.info("Call answered (simulated)")
+
+        # Trigger callback outside lock
+        if self._on_call_answered:
+            self._on_call_answered()
+
+    def simulate_call_ended(self) -> None:
+        """Simulate the call ending from remote side (for testing)."""
+        with self._lock:
+            if self._call_state not in (CallState.RINGING, CallState.CONNECTED):
+                logger.warning(
+                    "No active call to end in state: %s",
+                    self._call_state.value,
+                )
+                return
+
+            logger.info("Call ended (simulated)")
+            self._current_call_destination = None
+            self._current_call_caller = None
+
+            # Transition through DISCONNECTED to REGISTERED
+            self._set_call_state(CallState.DISCONNECTED)
+            self._set_call_state(CallState.REGISTERED)
+
+        # Trigger callback outside lock
+        if self._on_call_ended:
+            self._on_call_ended()

@@ -2,13 +2,20 @@
 
 import argparse
 import logging
+import signal
 import sys
 import time
-from typing import NoReturn
+from typing import NoReturn, Optional
 
+from rotary_phone.call_manager import CallManager
 from rotary_phone.config import ConfigManager
 from rotary_phone.config.config_manager import ConfigError
 from rotary_phone.hardware import get_gpio
+from rotary_phone.hardware.dial_reader import DialReader
+from rotary_phone.hardware.hook_monitor import HookMonitor
+from rotary_phone.hardware.ringer import Ringer
+from rotary_phone.sip.in_memory_client import InMemorySIPClient
+from rotary_phone.sip.pyvoip_client import PyVoIPClient
 
 
 def setup_logging(debug: bool = False) -> None:
@@ -101,28 +108,118 @@ def main() -> NoReturn:
 
     logger.info("Phone controller starting...")
 
-    # TODO: Initialize hardware components with config and hardware interface
-    # TODO: Initialize SIP client
-    # TODO: Start main event loop
+    # Get timing configuration
+    timing = config.get_timing_config()
+    sip_config = config.get_sip_config()
 
+    # Initialize hardware components
+    logger.info("Initializing hardware components...")
+    try:
+        hook_monitor = HookMonitor(
+            gpio=hardware,
+            debounce_time=timing.get("debounce_time", 0.05),
+        )
+        logger.info("  - HookMonitor initialized")
+
+        dial_reader = DialReader(
+            gpio=hardware,
+            pulse_timeout=timing.get("pulse_timeout", 0.15),
+        )
+        logger.info("  - DialReader initialized")
+
+        ringer = Ringer(
+            gpio=hardware,
+            ring_on_duration=timing.get("ring_duration", 2.0),
+            ring_off_duration=timing.get("ring_pause", 4.0),
+        )
+        logger.info("  - Ringer initialized")
+
+    except Exception as e:
+        logger.error("Failed to initialize hardware components: %s", e)
+        sys.exit(1)
+
+    # Initialize SIP client (use in-memory for mock mode, PyVoIP for real)
+    logger.info("Initializing SIP client...")
+    try:
+        if args.mock_gpio or not sip_config.get("server"):
+            logger.info("  - Using InMemorySIPClient (mock mode)")
+            sip_client = InMemorySIPClient()
+        else:
+            logger.info("  - Using PyVoIPClient (real VoIP)")
+            sip_client = PyVoIPClient()
+
+    except Exception as e:
+        logger.error("Failed to initialize SIP client: %s", e)
+        sys.exit(1)
+
+    # Initialize CallManager to wire everything together
+    logger.info("Initializing CallManager...")
+    try:
+        call_manager = CallManager(
+            config=config,
+            hook_monitor=hook_monitor,
+            dial_reader=dial_reader,
+            ringer=ringer,
+            sip_client=sip_client,
+        )
+        logger.info("  - CallManager initialized")
+
+    except Exception as e:
+        logger.error("Failed to initialize CallManager: %s", e)
+        sys.exit(1)
+
+    # Set up signal handlers for graceful shutdown
+    shutdown_requested = False
+    manager_ref: Optional[CallManager] = call_manager
+
+    def signal_handler(signum: int, frame: object) -> None:
+        nonlocal shutdown_requested
+        if shutdown_requested:
+            logger.warning("Force quit!")
+            sys.exit(1)
+        logger.info("\nShutdown requested (signal %d)...", signum)
+        shutdown_requested = True
+
+    signal.signal(signal.SIGINT, signal_handler)
+    signal.signal(signal.SIGTERM, signal_handler)
+
+    # Start the call manager
+    logger.info("Starting phone controller...")
+    try:
+        call_manager.start()
+    except Exception as e:
+        logger.error("Failed to start CallManager: %s", e)
+        sys.exit(1)
+
+    logger.info("=" * 60)
     logger.info("Phone controller is ready!")
+    logger.info("=" * 60)
     logger.info("Press Ctrl+C to stop")
 
+    # Main event loop
     try:
-        # Main loop - will be replaced with actual phone controller
-        while True:
-            time.sleep(1)
+        while not shutdown_requested:
+            time.sleep(0.1)
     except KeyboardInterrupt:
         logger.info("\nShutting down...")
-        # Cleanup hardware
-        try:
-            hardware.cleanup()
-            logger.info("Hardware cleaned up")
-        except RuntimeError as e:
-            logger.warning("Error cleaning up hardware: %s", e)
-        # TODO: Cleanup other components
-        logger.info("Goodbye!")
-        sys.exit(0)
+
+    # Graceful shutdown
+    logger.info("Stopping CallManager...")
+    try:
+        call_manager.stop()
+        logger.info("CallManager stopped")
+    except Exception as e:
+        logger.warning("Error stopping CallManager: %s", e)
+
+    logger.info("Cleaning up hardware...")
+    try:
+        hardware.cleanup()
+        logger.info("Hardware cleaned up")
+    except RuntimeError as e:
+        logger.warning("Error cleaning up hardware: %s", e)
+
+    logger.info("Goodbye!")
+    sys.exit(0)
 
 
 if __name__ == "__main__":
