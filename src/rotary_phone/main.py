@@ -82,11 +82,11 @@ def main() -> NoReturn:
         speed_dial = config.get("speed_dial", {})
         logger.info(f"Speed dial entries: {len(speed_dial)}")
 
-        whitelist = config.get("whitelist", [])
-        if "*" in whitelist:
-            logger.info("Whitelist: ALL numbers allowed")
+        allowlist = config.get("allowlist", [])
+        if "*" in allowlist:
+            logger.info("Allowlist: ALL numbers allowed")
         else:
-            logger.info(f"Whitelist entries: {len(whitelist)}")
+            logger.info(f"Allowlist entries: {len(allowlist)}")
 
     except ConfigError as e:
         logger.error(f"Configuration error: {e}")

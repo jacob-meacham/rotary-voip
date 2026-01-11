@@ -14,19 +14,11 @@ sip:
 # Example: "11": "+12065551234"  # Dad's cell
 speed_dial: {}
 
-# Whitelist - numbers that can be dialed directly
+# Allowlist - numbers that can be dialed directly
 # Use [] to block all direct dialing (speed dial only)
 # Use ["*"] to allow any number
 # Example: ["+12065551234", "+12065555678", "911"]
-whitelist: []
-
-# Hardware GPIO Pin Assignments (BCM numbering)
-hardware:
-  pin_hook: 17              # Hook switch (HIGH = on-hook, LOW = off-hook)
-  pin_dial_pulse: 27        # Dial pulse input
-  pin_dial_active: 22       # Dial off-normal (optional, 0 to disable)
-  pin_ringer: 23            # Ringer amplifier enable
-  pin_low_battery: 24       # PowerBoost LBO pin (optional, 0 to disable)
+allowlist: []
 
 # Timing Constants (in seconds)
 timing:
@@ -42,7 +34,6 @@ audio:
   dial_tone: "sounds/dialtone.wav"        # Path to dial tone
   busy_tone: "sounds/busy.wav"            # Path to busy signal
   error_tone: "sounds/error.wav"          # Path to error tone
-  use_original_ringer: false              # Use original bell (requires HV circuit)
 
 # Logging
 logging:

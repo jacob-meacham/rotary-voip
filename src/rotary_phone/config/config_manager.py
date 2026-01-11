@@ -89,7 +89,7 @@ class ConfigManager:
             ConfigError: If configuration is invalid
         """
         # Check required top-level sections
-        required_sections = ["sip", "hardware", "timing", "audio"]
+        required_sections = ["sip", "timing", "audio"]
         for section in required_sections:
             if section not in self._config:
                 raise ConfigError(f"Missing required config section: {section}")
@@ -101,23 +101,6 @@ class ConfigManager:
 
         # Note: server/username/password can be empty in mock mode, so we don't require them
         # They'll be validated at runtime when actually making calls
-
-        # Validate hardware pins are integers
-        hardware = self._config["hardware"]
-        if not isinstance(hardware, dict):
-            raise ConfigError("'hardware' section must be a dictionary")
-
-        for pin_name in [
-            "pin_hook",
-            "pin_dial_pulse",
-            "pin_dial_active",
-            "pin_ringer",
-            "pin_low_battery",
-        ]:
-            if pin_name not in hardware:
-                raise ConfigError(f"Missing required hardware setting: {pin_name}")
-            if not isinstance(hardware[pin_name], int):
-                raise ConfigError(f"Hardware '{pin_name}' must be an integer")
 
         # Validate timing values are positive numbers
         timing = self._config["timing"]
@@ -144,10 +127,10 @@ class ConfigManager:
             if not isinstance(self._config["speed_dial"], dict):
                 raise ConfigError("'speed_dial' must be a dictionary")
 
-        # Validate whitelist is a list (can be empty)
-        if "whitelist" in self._config:
-            if not isinstance(self._config["whitelist"], list):
-                raise ConfigError("'whitelist' must be a list")
+        # Validate allowlist is a list (can be empty)
+        if "allowlist" in self._config:
+            if not isinstance(self._config["allowlist"], list):
+                raise ConfigError("'allowlist' must be a list")
 
     def _load_config(self) -> None:
         """Load configuration from default and user files."""
@@ -208,23 +191,23 @@ class ConfigManager:
         speed_dial = self.get("speed_dial", {})
         return speed_dial.get(code)
 
-    def is_whitelisted(self, number: str) -> bool:
-        """Check if a phone number is whitelisted.
+    def is_allowed(self, number: str) -> bool:
+        """Check if a phone number is in the allowlist.
 
         Args:
             number: Phone number to check
 
         Returns:
-            True if number is whitelisted or whitelist contains "*"
+            True if number is in allowlist or allowlist contains "*"
         """
-        whitelist: List[str] = self.get("whitelist", [])
+        allowlist: List[str] = self.get("allowlist", [])
 
         # Check for wildcard
-        if "*" in whitelist:
+        if "*" in allowlist:
             return True
 
-        # Check if number is in whitelist
-        return number in whitelist
+        # Check if number is in allowlist
+        return number in allowlist
 
     def get_sip_config(self) -> Dict[str, Any]:
         """Get SIP configuration.
@@ -233,14 +216,6 @@ class ConfigManager:
             SIP configuration dictionary
         """
         return self.get("sip", {})
-
-    def get_hardware_config(self) -> Dict[str, Any]:
-        """Get hardware configuration.
-
-        Returns:
-            Hardware configuration dictionary
-        """
-        return self.get("hardware", {})
 
     def get_timing_config(self) -> Dict[str, Any]:
         """Get timing configuration.
