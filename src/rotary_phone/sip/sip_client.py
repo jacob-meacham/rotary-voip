@@ -79,6 +79,10 @@ class SIPClient(ABC):
     def hangup(self) -> None:
         """Hang up the current call."""
 
+    @abstractmethod
+    def reject_call(self) -> None:
+        """Reject an incoming call without answering."""
+
     def get_call_state(self) -> CallState:
         """Get the current call state.
 

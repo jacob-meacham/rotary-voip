@@ -193,6 +193,36 @@ def test_hangup_incoming_call() -> None:
     assert client.get_current_call_info() is None
 
 
+def test_reject_incoming_call() -> None:
+    """Test rejecting an incoming call."""
+    ended_calls = []
+
+    def on_ended() -> None:
+        ended_calls.append(True)
+
+    client = InMemorySIPClient(on_call_ended=on_ended)
+    client.register("sip:user@example.com", "user", "password")
+    client.simulate_incoming_call("5559876543")
+    assert client.get_call_state() == CallState.RINGING
+
+    client.reject_call()
+
+    assert client.get_call_state() == CallState.REGISTERED
+    assert client.get_current_call_info() is None
+    assert len(ended_calls) == 1
+
+
+def test_reject_call_when_not_ringing() -> None:
+    """Test rejecting when there's no incoming call does nothing."""
+    client = InMemorySIPClient()
+    client.register("sip:user@example.com", "user", "password")
+
+    # Try to reject when not ringing
+    client.reject_call()
+
+    assert client.get_call_state() == CallState.REGISTERED
+
+
 def test_incoming_call_when_not_registered() -> None:
     """Test incoming call when not registered is ignored."""
     client = InMemorySIPClient()

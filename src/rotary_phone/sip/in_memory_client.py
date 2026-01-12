@@ -190,6 +190,24 @@ class InMemorySIPClient(SIPClient):
         if self._on_call_ended:
             self._on_call_ended()
 
+    def reject_call(self) -> None:
+        """Reject an incoming call without answering (simulated)."""
+        with self._lock:
+            if self._call_state != CallState.RINGING:
+                logger.debug("No incoming call to reject")
+                return
+
+            logger.info("Rejecting incoming call from: %s", self._current_call_caller)
+            self._current_call_caller = None
+
+            # Transition through DISCONNECTED to REGISTERED
+            self._set_call_state(CallState.DISCONNECTED)
+            self._set_call_state(CallState.REGISTERED)
+
+        # Trigger callback outside lock
+        if self._on_call_ended:
+            self._on_call_ended()
+
     def simulate_incoming_call(self, caller_id: str) -> None:
         """Simulate an incoming call (for testing).
 

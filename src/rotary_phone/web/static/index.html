@@ -1,0 +1,239 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Rotary Phone Admin</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: #1a1a1a;
+            color: #e0e0e0;
+            padding: 20px;
+            line-height: 1.6;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        h1 {
+            font-size: 2rem;
+            margin-bottom: 1rem;
+            color: #4CAF50;
+        }
+
+        .card {
+            background: #2a2a2a;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 20px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.3);
+        }
+
+        .card h2 {
+            font-size: 1.5rem;
+            margin-bottom: 1rem;
+            color: #64B5F6;
+        }
+
+        .status-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 15px;
+        }
+
+        .status-item {
+            background: #1a1a1a;
+            padding: 15px;
+            border-radius: 6px;
+            border-left: 4px solid #4CAF50;
+        }
+
+        .status-label {
+            font-size: 0.875rem;
+            color: #888;
+            margin-bottom: 5px;
+        }
+
+        .status-value {
+            font-size: 1.25rem;
+            font-weight: 600;
+            color: #fff;
+        }
+
+        .state-indicator {
+            display: inline-block;
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            margin-right: 8px;
+            animation: pulse 2s infinite;
+        }
+
+        .state-idle { background: #666; }
+        .state-off_hook_waiting { background: #FFC107; }
+        .state-dialing { background: #2196F3; }
+        .state-calling { background: #FF9800; }
+        .state-ringing { background: #9C27B0; animation: pulse 1s infinite; }
+        .state-connected { background: #4CAF50; }
+        .state-error { background: #F44336; }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+
+        .refresh-btn {
+            background: #4CAF50;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 6px;
+            font-size: 1rem;
+            cursor: pointer;
+            transition: background 0.3s;
+        }
+
+        .refresh-btn:hover {
+            background: #45a049;
+        }
+
+        .config-item {
+            background: #1a1a1a;
+            padding: 10px 15px;
+            border-radius: 6px;
+            margin-bottom: 10px;
+            display: flex;
+            justify-content: space-between;
+        }
+
+        .config-label {
+            color: #888;
+        }
+
+        .config-value {
+            color: #fff;
+            font-family: monospace;
+        }
+
+        .last-updated {
+            text-align: right;
+            color: #666;
+            font-size: 0.875rem;
+            margin-top: 10px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>📞 Rotary Phone Admin</h1>
+
+        <div class="card">
+            <h2>Phone Status</h2>
+            <button class="refresh-btn" onclick="loadStatus()">Refresh</button>
+            <div class="status-grid" style="margin-top: 20px;">
+                <div class="status-item">
+                    <div class="status-label">State</div>
+                    <div class="status-value" id="phone-state">
+                        <span class="state-indicator state-idle"></span>
+                        Loading...
+                    </div>
+                </div>
+                <div class="status-item">
+                    <div class="status-label">Dialed Number</div>
+                    <div class="status-value" id="dialed-number">—</div>
+                </div>
+                <div class="status-item">
+                    <div class="status-label">Error Message</div>
+                    <div class="status-value" id="error-message" style="color: #F44336;">—</div>
+                </div>
+            </div>
+            <div class="last-updated" id="last-updated">Last updated: Never</div>
+        </div>
+
+        <div class="card">
+            <h2>Configuration</h2>
+            <div id="config-display">Loading...</div>
+        </div>
+    </div>
+
+    <script>
+        async function loadStatus() {
+            try {
+                const response = await fetch('/api/status');
+                const data = await response.json();
+
+                // Update phone state
+                const stateElement = document.getElementById('phone-state');
+                const state = data.phone.state;
+                stateElement.innerHTML = `<span class="state-indicator state-${state.toLowerCase()}"></span>${formatState(state)}`;
+
+                // Update dialed number
+                document.getElementById('dialed-number').textContent = data.phone.dialed_number || '—';
+
+                // Update error message
+                const errorMsg = data.phone.error_message || '—';
+                document.getElementById('error-message').textContent = errorMsg;
+                document.getElementById('error-message').style.color = errorMsg === '—' ? '#666' : '#F44336';
+
+                // Update last updated time
+                document.getElementById('last-updated').textContent = `Last updated: ${new Date().toLocaleTimeString()}`;
+            } catch (error) {
+                console.error('Error loading status:', error);
+                alert('Failed to load status. Is the server running?');
+            }
+        }
+
+        async function loadConfig() {
+            try {
+                const response = await fetch('/api/config');
+                const config = await response.json();
+
+                const configDisplay = document.getElementById('config-display');
+                configDisplay.innerHTML = '';
+
+                // Display key config items
+                const items = [
+                    { label: 'SIP Server', value: config.sip?.server || 'Not configured' },
+                    { label: 'SIP Username', value: config.sip?.username || 'Not configured' },
+                    { label: 'SIP Port', value: config.sip?.port || '5060' },
+                ];
+
+                items.forEach(item => {
+                    const div = document.createElement('div');
+                    div.className = 'config-item';
+                    div.innerHTML = `
+                        <span class="config-label">${item.label}:</span>
+                        <span class="config-value">${item.value}</span>
+                    `;
+                    configDisplay.appendChild(div);
+                });
+            } catch (error) {
+                console.error('Error loading config:', error);
+                document.getElementById('config-display').textContent = 'Failed to load configuration';
+            }
+        }
+
+        function formatState(state) {
+            return state.split('_').map(word =>
+                word.charAt(0).toUpperCase() + word.slice(1).toLowerCase()
+            ).join(' ');
+        }
+
+        // Auto-refresh every 2 seconds
+        setInterval(loadStatus, 2000);
+
+        // Initial load
+        loadStatus();
+        loadConfig();
+    </script>
+</body>
+</html>

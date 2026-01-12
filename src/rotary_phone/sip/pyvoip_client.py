@@ -273,6 +273,26 @@ class PyVoIPClient(SIPClient):
             if self._on_call_ended:
                 self._on_call_ended()
 
+    def reject_call(self) -> None:
+        """Reject an incoming call without answering."""
+        with self._lock:
+            if self._current_call is None or self._call_state != CallState.RINGING:
+                logger.debug("No incoming call to reject")
+                return
+
+            logger.info("Rejecting incoming call")
+
+            try:
+                self._current_call.deny()
+            except Exception as e:
+                logger.warning("Error rejecting call: %s", e)
+
+            self._current_call = None
+            self._set_call_state(CallState.REGISTERED)
+
+            if self._on_call_ended:
+                self._on_call_ended()
+
     def _on_incoming_call_internal(self, call: VoIPCall) -> None:
         """Internal callback for incoming calls from pyVoIP.
 

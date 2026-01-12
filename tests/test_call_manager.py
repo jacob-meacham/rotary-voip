@@ -263,6 +263,32 @@ def test_incoming_call_ignored_when_not_idle(call_manager, mock_ringer):
     mock_ringer.start_ringing.assert_not_called()
 
 
+def test_incoming_call_rejected_by_allowlist(
+    mock_config, mock_hook_monitor, mock_dial_reader, mock_ringer, mock_sip_client
+):
+    """Test that incoming calls from numbers not in allowlist are rejected."""
+    # Configure allowlist to block the caller
+    mock_config.is_allowed.return_value = False
+
+    call_manager = CallManager(
+        config=mock_config,
+        hook_monitor=mock_hook_monitor,
+        dial_reader=mock_dial_reader,
+        ringer=mock_ringer,
+        sip_client=mock_sip_client,
+    )
+    call_manager.start()
+    assert call_manager.get_state() == PhoneState.IDLE
+
+    # Incoming call from blocked number
+    call_manager._on_incoming_call("5559999999")
+
+    # Should remain in IDLE, ringer not started, call rejected
+    assert call_manager.get_state() == PhoneState.IDLE
+    mock_ringer.start_ringing.assert_not_called()
+    mock_sip_client.reject_call.assert_called_once()
+
+
 def test_hang_up_during_dialing(call_manager, mock_sip_client):
     """Test hanging up while dialing."""
     call_manager.start()

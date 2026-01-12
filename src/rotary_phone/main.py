@@ -225,6 +225,43 @@ def main() -> NoReturn:  # pylint: disable=too-many-locals,too-many-branches,too
     signal.signal(signal.SIGINT, signal_handler)
     signal.signal(signal.SIGTERM, signal_handler)
 
+    # Start web admin interface if enabled
+    web_enabled = config.get("web.enabled", False)
+    if web_enabled:
+        logger.info("Starting web admin interface...")
+        try:
+            # pylint: disable=import-outside-toplevel
+            from threading import Thread
+
+            import uvicorn
+
+            from rotary_phone.web.app import create_app
+
+            # Create FastAPI app
+            web_app = create_app(call_manager=call_manager, config_manager=config)
+
+            # Start FastAPI in daemon thread
+            def run_web_server() -> None:
+                uvicorn.run(
+                    web_app,
+                    host=config.get("web.host", "0.0.0.0"),
+                    port=config.get("web.port", 8000),
+                    log_level="warning",  # Reduce uvicorn logging noise
+                )
+
+            web_thread = Thread(target=run_web_server, daemon=True, name="WebServer")
+            web_thread.start()
+
+            logger.info(
+                "  - Web admin interface started at http://%s:%d",
+                config.get("web.host", "0.0.0.0"),
+                config.get("web.port", 8000),
+            )
+
+        except Exception as e:
+            logger.error("Failed to start web admin interface: %s", e)
+            logger.warning("Continuing without web interface...")
+
     # Start the call manager
     logger.info("Starting phone controller...")
     try:

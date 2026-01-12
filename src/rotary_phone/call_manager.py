@@ -385,6 +385,22 @@ class CallManager:  # pylint: disable=too-many-instance-attributes
                 )
                 return
 
+            # Check allowlist for incoming calls
+            if not self._config.is_allowed(caller_id):
+                logger.warning("Rejecting incoming call from %s (not in allowlist)", caller_id)
+                # Log rejected call
+                if self._call_logger:
+                    self._call_logger.on_inbound_call_started(caller_id)
+                    self._call_logger.on_call_rejected(
+                        caller_id, f"Caller {caller_id} is not in allowlist"
+                    )
+                # Reject the call
+                try:
+                    self._sip_client.reject_call()
+                except Exception as e:
+                    logger.error("Failed to reject call: %s", e)
+                return
+
             # Track caller ID for logging
             self._current_caller_id = caller_id
 
