@@ -15,7 +15,7 @@ from rotary_phone.hardware.dial_reader import DialReader
 from rotary_phone.hardware.dial_tone import DialTone
 from rotary_phone.hardware.hook_monitor import HookMonitor, HookState
 from rotary_phone.hardware.ringer import Ringer
-from rotary_phone.sip.sip_client import CallState, SIPClient
+from rotary_phone.sip.sip_client import SIPClient
 
 logger = logging.getLogger(__name__)
 

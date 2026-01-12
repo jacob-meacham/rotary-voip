@@ -118,6 +118,7 @@ class DialTone:
                 with self._lock:
                     if not self._is_playing:
                         break
+                    # pylint: disable=consider-using-with
                     self._process = subprocess.Popen(
                         ["aplay", "-q", self._sound_file],
                         stdout=subprocess.DEVNULL,
@@ -128,7 +129,7 @@ class DialTone:
                 while not self._stop_event.is_set():
                     try:
                         # Poll with short timeout to check stop event frequently
-                        returncode = self._process.wait(timeout=0.1)
+                        _returncode = self._process.wait(timeout=0.1)
                         # Process finished, loop to play again
                         break
                     except subprocess.TimeoutExpired:

@@ -4,9 +4,11 @@ This module provides a SIP client implementation using the pyVoIP library
 for making real VoIP calls.
 """
 
+import audioop  # pylint: disable=deprecated-module
 import logging
 import threading
 import time
+import wave
 from typing import Callable, Optional
 
 from pyVoIP.VoIP import CallState as PyVoIPCallState
@@ -339,9 +341,6 @@ class PyVoIPClient(SIPClient):
         Raises:
             RuntimeError: If no active call or file cannot be read
         """
-        import audioop
-        import wave
-
         with self._lock:
             if self._current_call is None or self._call_state != CallState.CONNECTED:
                 raise RuntimeError(f"No connected call (state: {self._call_state.value})")
@@ -417,9 +416,9 @@ class PyVoIPClient(SIPClient):
             logger.info("Audio sent successfully")
             return True
 
-        except FileNotFoundError:
+        except FileNotFoundError as exc:
             logger.error("Audio file not found: %s", file_path)
-            raise RuntimeError(f"Audio file not found: {file_path}")
+            raise RuntimeError(f"Audio file not found: {file_path}") from exc
         except Exception as e:
             logger.error("Error sending audio: %s", e)
-            raise RuntimeError(f"Error sending audio: {e}")
+            raise RuntimeError(f"Error sending audio: {e}") from e
