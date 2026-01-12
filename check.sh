@@ -1,18 +1,33 @@
 #!/bin/bash
 # Run all quality checks for the rotary phone project
 
-set -e  # Exit on first error
+# Track if any check fails
+exit_code=0
 
 echo "Running Black formatter check..."
-uv run black --check src tests
+if ! uv run black --check src tests; then
+    exit_code=1
+fi
 
 echo -e "\nRunning mypy type checker..."
-uv run mypy src/rotary_phone
+if ! uv run mypy src/rotary_phone; then
+    exit_code=1
+fi
 
 echo -e "\nRunning pylint..."
-uv run pylint src/rotary_phone
+if ! uv run pylint src/rotary_phone; then
+    exit_code=1
+fi
 
 echo -e "\nRunning pytest..."
-uv run pytest
+if ! uv run pytest; then
+    exit_code=1
+fi
 
-echo -e "\n✅ All checks passed!"
+if [ $exit_code -eq 0 ]; then
+    echo -e "\n✅ All checks passed!"
+else
+    echo -e "\n❌ Some checks failed!"
+fi
+
+exit $exit_code
