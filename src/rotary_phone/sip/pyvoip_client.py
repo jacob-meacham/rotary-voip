@@ -65,12 +65,14 @@ class PyVoIPClient(SIPClient):
 
             try:
                 # Create VoIPPhone instance
+                # Use sipPort=0 to let OS assign a random free port for the client
                 self._phone = VoIPPhone(
                     server=server,
                     port=port,
                     username=username,
                     password=password,
                     callCallback=self._on_incoming_call_internal,
+                    sipPort=0,
                 )
 
                 # Start the phone (begins registration)
@@ -318,3 +320,104 @@ class PyVoIPClient(SIPClient):
             logger.warning("Error extracting caller ID: %s", e)
 
         return "Unknown"
+
+    def send_audio_file(self, file_path: str, stop_check: Optional[Callable[[], bool]] = None) -> bool:
+        """Send audio from a WAV file through the current call.
+
+        The WAV file should be 8kHz, 8-bit μ-law (PCMU) format for best quality.
+        Other formats will be automatically converted.
+
+        Args:
+            file_path: Path to WAV file
+            stop_check: Optional callback that returns True if audio should stop
+
+        Returns:
+            True if audio completed, False if interrupted
+
+        Raises:
+            RuntimeError: If no active call or file cannot be read
+        """
+        import audioop
+        import wave
+
+        with self._lock:
+            if self._current_call is None or self._call_state != CallState.CONNECTED:
+                raise RuntimeError(f"No connected call (state: {self._call_state.value})")
+
+        logger.info("Sending audio file: %s", file_path)
+
+        try:
+            # Open and read WAV file
+            with wave.open(file_path, "rb") as wav:
+                channels = wav.getnchannels()
+                sample_width = wav.getsampwidth()
+                framerate = wav.getframerate()
+                frames = wav.getnframes()
+
+                logger.info(
+                    "WAV format: %d Hz, %d-bit, %d channel(s), %d frames",
+                    framerate,
+                    sample_width * 8,
+                    channels,
+                    frames,
+                )
+
+                # Read all frames
+                audio_data = wav.readframes(frames)
+
+            # Convert to mono if stereo
+            if channels == 2:
+                logger.info("Converting stereo to mono")
+                audio_data = audioop.tomono(audio_data, sample_width, 0.5, 0.5)
+                channels = 1
+
+            # Resample to 8kHz if needed
+            if framerate != 8000:
+                logger.info("Resampling from %d Hz to 8000 Hz", framerate)
+                audio_data, _ = audioop.ratecv(audio_data, sample_width, 1, framerate, 8000, None)
+                # Recalculate frames after resampling
+                frames = len(audio_data) // sample_width
+                framerate = 8000
+
+            # Convert to 16-bit linear PCM if needed, then to μ-law
+            if sample_width != 1:  # Not already 8-bit
+                if sample_width != 2:
+                    logger.info("Converting to 16-bit")
+                    audio_data = audioop.lin2lin(audio_data, sample_width, 2)
+
+                # Convert 16-bit linear PCM to 8-bit μ-law
+                logger.info("Converting to G.711 μ-law (PCMU)")
+                audio_data = audioop.lin2ulaw(audio_data, 2)
+            else:
+                # Assume it's already μ-law encoded
+                logger.info("Audio appears to be 8-bit (assuming μ-law)")
+
+            # Send all audio at once (pyVoIP will handle packetization)
+            logger.info("Sending %d bytes of audio", len(audio_data))
+            self._current_call.write_audio(audio_data)
+
+            # Wait for the audio to finish playing (checking for interruption)
+            # At 8kHz μ-law (8-bit), we have 8000 bytes per second
+            duration = len(audio_data) / 8000.0
+            logger.info("Waiting %.2f seconds for audio to play", duration)
+
+            # Wait in small intervals so we can check for interruption
+            elapsed = 0.0
+            interval = 0.1  # Check every 100ms
+            while elapsed < duration:
+                if stop_check and stop_check():
+                    logger.info("Audio playback interrupted after %.2f seconds", elapsed)
+                    return False
+
+                time.sleep(min(interval, duration - elapsed))
+                elapsed += interval
+
+            logger.info("Audio sent successfully")
+            return True
+
+        except FileNotFoundError:
+            logger.error("Audio file not found: %s", file_path)
+            raise RuntimeError(f"Audio file not found: {file_path}")
+        except Exception as e:
+            logger.error("Error sending audio: %s", e)
+            raise RuntimeError(f"Error sending audio: {e}")

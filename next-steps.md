@@ -49,10 +49,10 @@ The standalone phone system that:
 **This runs independently and makes the phone work.**
 
 ### Part 2: Web Admin Interface (LATER)
-Optional web interface that:
+Web interface that:
 - Provides UI for configuration
 - Shows call logs
-- Manages network settings
+- Manages network settings (including initial settings before connected to wifi)
 - Controls the phone remotely
 
 ---
@@ -65,12 +65,12 @@ Set up modern Python development environment with uv and testing framework for t
 ### Tasks
 
 #### 1.1 Initialize uv Project
-- [ ] Initialize uv project with `uv init`
-- [ ] Configure `pyproject.toml` with project metadata
-- [ ] Set up Python version (3.11+)
-- [ ] Add core dependencies (PyYAML, pytest)
-- [ ] Add dev dependencies (black, mypy, pylint)
-- [ ] Note: GPIO libraries will be optional (mock-able for dev)
+- [x] Initialize uv project with `uv init`
+- [x] Configure `pyproject.toml` with project metadata
+- [x] Set up Python version (3.11+)
+- [x] Add core dependencies (PyYAML, pytest)
+- [x] Add dev dependencies (black, mypy, pylint)
+- [x] Note: GPIO libraries will be optional (mock-able for dev)
 
 #### 1.2 Basic Project Structure
 Create only what we need to start:
@@ -143,10 +143,10 @@ After foundation, we'll build incrementally:
 - [x] Commit: "Add GPIO abstraction layer"
 
 ### Phase 4: Test Harness
-- [ ] Interactive CLI for testing without hardware
-- [ ] Simulate dial pulses, hook states
-- [ ] Automated test scenarios
-- [ ] Commit: "Add interactive test harness"
+- [x] Interactive CLI for testing without hardware
+- [x] Simulate dial pulses, hook states
+- [x] Automated test scenarios
+- [x] Commit: "Add interactive test harness"
 
 ### Phase 5: Dial Reader
 - [x] DialReader class with pulse counting
@@ -202,7 +202,9 @@ After foundation, we'll build incrementally:
 - [ ] Documentation
 - [ ] Commit: "Add systemd service support"
 
----
+### Phase 12: Add dial tone when off the hook
+
+### Phase 13: Add call logging (Sqlite DB)
 
 ## Part 2: Web Admin (Future)
 After the core phone controller is working, we'll add the web admin interface as a separate component/process that can control and monitor the phone.

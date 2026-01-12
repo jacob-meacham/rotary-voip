@@ -127,10 +127,15 @@ def main() -> NoReturn:
         )
         logger.info("  - DialReader initialized")
 
+        # Get optional ring sound file from hardware config
+        hardware_config = config.get("hardware", {})
+        ring_sound_file = hardware_config.get("ring_sound_file")
+
         ringer = Ringer(
             gpio=hardware,
             ring_on_duration=timing.get("ring_duration", 2.0),
             ring_off_duration=timing.get("ring_pause", 4.0),
+            sound_file=ring_sound_file,
         )
         logger.info("  - Ringer initialized")
 
