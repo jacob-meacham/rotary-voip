@@ -159,9 +159,10 @@ class RealPhoneTestHarness:
                 print()
 
             # Detect call ended
-            elif (
-                current_state == PhoneState.IDLE
-                and self._last_state in (PhoneState.CONNECTED, PhoneState.CALLING, PhoneState.RINGING)
+            elif current_state == PhoneState.IDLE and self._last_state in (
+                PhoneState.CONNECTED,
+                PhoneState.CALLING,
+                PhoneState.RINGING,
             ):
                 print("\n✓ Call ended")
                 print()

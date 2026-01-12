@@ -164,7 +164,8 @@ class Ringer:
             self._gpio.output(RINGER, GPIO.LOW)
         except FileNotFoundError:
             logger.error("aplay command not found - falling back to GPIO toggle mode")
-            self._sound_file = None  # Disable audio mode
+            with self._lock:
+                self._sound_file = None  # Disable audio mode
             self._gpio_toggle_ring()
         except Exception as e:
             logger.error("Error playing ring sound: %s", e)

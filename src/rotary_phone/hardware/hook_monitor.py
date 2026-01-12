@@ -102,6 +102,22 @@ class HookMonitor:
         """
         return self._state
 
+    def set_callbacks(
+        self,
+        on_off_hook: Optional[Callable[[], None]] = None,
+        on_on_hook: Optional[Callable[[], None]] = None,
+    ) -> None:
+        """Set callbacks for hook state changes.
+
+        Args:
+            on_off_hook: Callback when phone goes off-hook (picked up)
+            on_on_hook: Callback when phone goes on-hook (hung up)
+        """
+        if on_off_hook is not None:
+            self._on_off_hook = on_off_hook
+        if on_on_hook is not None:
+            self._on_on_hook = on_on_hook
+
     def _on_edge(self, _pin: int) -> None:
         """Handle edge detection on hook pin.
 

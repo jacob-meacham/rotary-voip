@@ -87,6 +87,26 @@ class SIPClient(ABC):
         """
         return self._call_state
 
+    def set_callbacks(
+        self,
+        on_incoming_call: Optional[Callable[[str], None]] = None,
+        on_call_answered: Optional[Callable[[], None]] = None,
+        on_call_ended: Optional[Callable[[], None]] = None,
+    ) -> None:
+        """Set callbacks for call events.
+
+        Args:
+            on_incoming_call: Callback when incoming call arrives (receives caller ID)
+            on_call_answered: Callback when call is answered
+            on_call_ended: Callback when call ends
+        """
+        if on_incoming_call is not None:
+            self._on_incoming_call = on_incoming_call
+        if on_call_answered is not None:
+            self._on_call_answered = on_call_answered
+        if on_call_ended is not None:
+            self._on_call_ended = on_call_ended
+
     def _set_call_state(self, state: CallState) -> None:
         """Set the call state (for use by subclasses).
 

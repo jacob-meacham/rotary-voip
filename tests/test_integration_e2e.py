@@ -270,8 +270,6 @@ def test_speed_dial_expansion(phone_system):
     config.get_speed_dial.assert_called_with("11")
 
 
-
-
 @pytest.mark.flaky
 def test_call_ended_remotely(phone_system):
     """Test handling when remote party hangs up.
@@ -314,8 +312,6 @@ def test_call_ended_remotely(phone_system):
     simulate_hook_on(gpio)
     time.sleep(0.05)
     assert manager.get_state() == PhoneState.IDLE
-
-
 
 
 @pytest.mark.flaky
@@ -372,5 +368,3 @@ def test_multiple_sequential_calls(phone_system):
     simulate_hook_on(gpio)
     time.sleep(0.05)
     assert manager.get_state() == PhoneState.IDLE
-
-

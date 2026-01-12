@@ -58,9 +58,7 @@ def create_tone_wav(filename: str, duration: float = 3.0, frequency: float = 440
     print(f"  Duration: {len(samples) / sample_rate:.1f}s")
 
 
-def create_speech_like_tone(
-    filename: str, duration: float = 3.0
-) -> None:
+def create_speech_like_tone(filename: str, duration: float = 3.0) -> None:
     """Create a WAV file with multiple tones to sound more speech-like.
 
     Args:

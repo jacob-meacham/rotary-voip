@@ -81,6 +81,14 @@ class DialReader:
 
         logger.info("DialReader stopped")
 
+    def set_on_digit_callback(self, on_digit: Optional[Callable[[str], None]]) -> None:
+        """Set callback for when a digit is detected.
+
+        Args:
+            on_digit: Callback that receives the detected digit as a string
+        """
+        self._on_digit = on_digit
+
     def _on_pulse(self, _pin: int) -> None:
         """Handle a dial pulse (falling edge).
 

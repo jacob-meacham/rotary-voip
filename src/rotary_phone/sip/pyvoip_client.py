@@ -215,7 +215,7 @@ class PyVoIPClient(SIPClient):
 
                 elif call_state == PyVoIPCallState.ENDED:
                     logger.info("Call ended")
-                    self._set_call_state(CallState.DISCONNECTED)
+                    # Go directly back to REGISTERED (skip intermediate DISCONNECTED state)
                     self._set_call_state(CallState.REGISTERED)
                     if self._on_call_ended:
                         self._on_call_ended()
@@ -265,7 +265,7 @@ class PyVoIPClient(SIPClient):
                 logger.warning("Error hanging up call: %s", e)
 
             self._current_call = None
-            self._set_call_state(CallState.DISCONNECTED)
+            # Go directly back to REGISTERED (skip intermediate DISCONNECTED state)
             self._set_call_state(CallState.REGISTERED)
 
             if self._on_call_ended:
@@ -321,7 +321,9 @@ class PyVoIPClient(SIPClient):
 
         return "Unknown"
 
-    def send_audio_file(self, file_path: str, stop_check: Optional[Callable[[], bool]] = None) -> bool:
+    def send_audio_file(
+        self, file_path: str, stop_check: Optional[Callable[[], bool]] = None
+    ) -> bool:
         """Send audio from a WAV file through the current call.
 
         The WAV file should be 8kHz, 8-bit μ-law (PCMU) format for best quality.

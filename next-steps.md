@@ -197,14 +197,20 @@ After foundation, we'll build incrementally:
 - [x] Commit: "Complete phone controller integration (Phase 10)"
 
 ### Phase 11: Systemd Service
-- [ ] Service file
-- [ ] Installation script
-- [ ] Documentation
-- [ ] Commit: "Add systemd service support"
+- [x] Service file
+- [x] Installation script
+- [x] Documentation
+- [x] Commit: "Add systemd service support"
 
 ### Phase 12: Add dial tone when off the hook
+- [x] Create DialTone class for audio playback
+- [x] Integrate into CallManager state machine
+- [x] Add 11 comprehensive tests
+- [x] Commit: "Add dial tone when off-hook"
 
 ### Phase 13: Add call logging (Sqlite DB)
+
+### Phase 14: track config changes
 
 ## Part 2: Web Admin (Future)
 After the core phone controller is working, we'll add the web admin interface as a separate component/process that can control and monitor the phone.

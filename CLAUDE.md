@@ -49,14 +49,17 @@ MOCK_GPIO=1 python -m src.main
 
 ### Linting and Code Quality
 ```bash
-# Format code with black
+./check.sh
+
+# If needed, format code with black
 black src/ tests/
 
-# Check types with mypy
+# If needed, check types with mypy
 mypy src/
 
-# Run linter
+# If needed, run linter
 pylint src/
+
 ```
 
 ## Architecture
@@ -232,24 +235,6 @@ This project has three test suites with different purposes and costs:
 ```bash
 uv run pytest                                    # All tests
 uv run pytest tests/test_integration_e2e.py -v  # Just E2E
-```
-
----
-
-### 2. Docker SIPp Integration Tests (`./run_integration_tests.sh`)
-**When to run:** When verifying SIP protocol compliance
-
-**What it includes:**
-- Starts Docker container with SIPp (SIP testing tool)
-- `tests/test_sip_integration.py` - Protocol-level SIP tests
-- Tests PyVoIPClient against simulated SIP server
-
-**Cost:** Free, requires Docker (~10 seconds)
-
-**Permission:** Run freely without asking
-
-```bash
-./run_integration_tests.sh
 ```
 
 ---
