@@ -1,225 +1,465 @@
 # Next Steps - Rotary Phone VoIP Project
 
 ## Current Status
-✅ **Code Cleanup Complete**: All quality improvements done
-
-### Cleanup Tasks (Completed):
-- [x] Remove dead FileNotFoundError handler
-- [x] Fix threading issue in MockGPIO
-- [x] Convert Pins class to Enum
-- [x] Add type specificity to ConfigManager.get()
-- [x] Rename GPIO → PhoneHardware in public API
-- [x] Fix all pylint errors (10.00/10 score)
-- [x] Ensure full mypy type coverage (0 errors)
-- [x] Fix logging to use lazy % formatting
-- [x] Add proper exception chaining with `from`
-- [x] Remove unnecessary pass statements
-- [x] Add encoding to file opens
+**Core Phone Controller**: Complete (Phases 1-13)
+**Web Admin Interface**: In Progress
 
 ---
 
-✅ **Phase 3 Complete**: GPIO abstraction layer is working
+## Web Admin Interface - Project Plan
 
-Latest commits:
-- `81d174e` - Add GPIO abstraction layer for hardware independence
-- `168e05c` - Simplify configuration: remove GPIO pins, rename to allowlist
-- `da0ec54` - Add configuration management system
-- `b3c0977` - Initial project setup with uv and pytest
+### Already Implemented
+- FastAPI app with basic endpoints ([app.py](src/rotary_phone/web/app.py))
+- Dashboard showing phone state with auto-refresh (2s polling)
+- Raw YAML config editor with validation
+- Sound file listing and WAV upload with RIFF validation
+- Dark theme single-page app with tabs
+- Integration with CallManager and ConfigManager
 
-What works now:
-- YAML-based configuration with simplified structure
-- GPIO abstraction (MockGPIO + RealGPIO) for hardware independence
-- Auto-detection of GPIO type (mock on dev machines, real on Pi)
-- Pin constants defined (HOOK=17, DIAL_PULSE=27, etc.)
-- Full GPIO simulation for testing without hardware
-- Edge detection with callbacks
-- 30 tests all passing (13 config + 17 GPIO)
-
-## Project Architecture - Two Parts
-
-### Part 1: Core Phone Controller (CURRENT FOCUS)
-The standalone phone system that:
-- Reads rotary dial pulses
-- Monitors hook switch
-- Controls ringer
-- Makes/receives SIP calls
-- Logs to console/file
-- Uses YAML config file
-
-**This runs independently and makes the phone work.**
-
-### Part 2: Web Admin Interface (LATER)
-Web interface that:
-- Provides UI for configuration
-- Shows call logs
-- Manages network settings (including initial settings before connected to wifi)
-- Controls the phone remotely
+### Features to Build
 
 ---
 
-## Immediate Next Steps - Phase 1: Foundation
+## Phase W1: Allowlist Management API & UI - COMPLETE
 
 ### Goal
-Set up modern Python development environment with uv and testing framework for the core phone controller.
+Provide a user-friendly interface to manage which phone numbers can be dialed.
 
-### Tasks
+### Backend Tasks
+- [x] `GET /api/allowlist` - Return current allowlist from config
+- [x] `PUT /api/allowlist` - Update allowlist (array of patterns or `["*"]`)
+- [x] Validation: Ensure patterns are valid (phone numbers, `*`, `+` prefix)
+- [x] Update ConfigManager in-memory after save
+- [x] Atomic write to config.yml
 
-#### 1.1 Initialize uv Project
-- [x] Initialize uv project with `uv init`
-- [x] Configure `pyproject.toml` with project metadata
-- [x] Set up Python version (3.11+)
-- [x] Add core dependencies (PyYAML, pytest)
-- [x] Add dev dependencies (black, mypy, pylint)
-- [x] Note: GPIO libraries will be optional (mock-able for dev)
+### Frontend Tasks
+- [x] Add "Allowlist" tab to UI
+- [x] Display current allowlist entries in a list
+- [x] Add/remove individual entries
+- [x] Toggle between "Allow All" (`*`) and specific numbers
+- [x] Input validation for phone number format
+- [x] Success/error feedback
 
-#### 1.2 Basic Project Structure
-Create only what we need to start:
+### Config Structure
+```yaml
+allowlist:
+  - "+12065551234"
+  - "+12065555678"
+  # OR
+  - "*"  # Allow any number
 ```
-src/
-  rotary_phone/
-    __init__.py
-    main.py          # Entry point for phone controller
-tests/
-  __init__.py
-  test_main.py       # Basic test
-.gitignore
-pyproject.toml
-README.md
-```
-
-#### 1.3 Hello World Phone Controller
-- [x] Create basic main.py that prints "Phone controller starting..."
-- [x] Add command-line argument parsing (--debug, --mock-gpio)
-- [x] Add proper logging setup
-- [x] Make it runnable with `uv run python -m rotary_phone.main`
-
-#### 1.4 Test Framework
-- [x] Configure pytest in `pyproject.toml`
-- [x] Create first test in `tests/test_main.py`
-- [x] Verify tests run with `uv run pytest`
-- [x] Add test coverage reporting
-
-#### 1.5 Development Workflow Commands
-- [x] Add commands to `pyproject.toml` for:
-  - `uv run phone` - Start phone controller
-  - `uv run phone --mock-gpio` - Start with mock hardware
-  - `uv run test` - Run tests
-  - `uv run test-watch` - Run tests in watch mode
-  - `uv run format` - Format code with black
-  - `uv run lint` - Run linter
-  - `uv run typecheck` - Run mypy
-
-#### 1.6 Basic .gitignore
-- [x] Create `.gitignore` for Python, uv, IDE files
-- [x] Ignore config.yaml (contains secrets)
-- [x] Ignore *.log files
-
-#### 1.7 First Commit
-- [x] Commit foundation: "Initial project setup with uv and pytest"
-
-### Success Criteria
-- [x] `uv run phone` starts the phone controller (even if it does nothing yet)
-- [x] `uv run test` runs and passes basic tests
-- [x] Can iterate quickly: change code → test → commit
-- [x] Foundation ready for building hardware abstractions
 
 ---
 
-## Next Phases (Core Phone Controller)
+## Phase W2: Speed Dial Management API & UI
 
-After foundation, we'll build incrementally:
+### Goal
+Allow users to create and manage speed dial shortcuts.
+
+### Backend Tasks
+- [ ] `GET /api/speed-dial` - Return current speed dial mappings
+- [ ] `PUT /api/speed-dial` - Update entire speed dial config
+- [ ] `POST /api/speed-dial` - Add single speed dial entry
+- [ ] `DELETE /api/speed-dial/{code}` - Remove speed dial entry
+- [ ] Validation: Code must be 1-2 digits, destination must be valid phone number
+- [ ] Update ConfigManager in-memory after save
+
+### Frontend Tasks
+- [ ] Add "Speed Dial" tab to UI
+- [ ] Table showing: Code | Destination | Label (optional) | Actions
+- [ ] Add new speed dial form (code input, phone number input)
+- [ ] Edit existing entries inline
+- [ ] Delete with confirmation
+- [ ] Import/export as JSON/CSV
+
+### Config Structure
+```yaml
+speed_dial:
+  "1": "+12065551234"   # Mom
+  "2": "+12065555678"   # Dad
+  "11": "+18005551234"  # Work
+```
+
+---
+
+## Phase W3: Sound File Management Enhancement
+
+### Goal
+Complete sound management with playback, deletion, and assignment.
+
+### Backend Tasks
+- [ ] `GET /api/sounds/{filename}` - Stream audio file for playback
+- [ ] `DELETE /api/sounds/{filename}` - Delete a sound file
+- [ ] `GET /api/sound-assignments` - Get current sound assignments from config
+- [ ] `PUT /api/sound-assignments` - Update sound assignments
+
+### Frontend Tasks
+- [ ] Add playback button for each sound (HTML5 audio)
+- [ ] Add delete button with confirmation
+- [ ] Sound assignment section showing:
+  - Ring sound -> dropdown of available .wav files
+  - Dial tone -> dropdown
+  - Busy tone -> dropdown
+  - Error tone -> dropdown
+- [ ] Preview before assigning
+
+### Config Structure
+```yaml
+audio:
+  ring_sound: "sounds/ring.wav"
+  dial_tone: "sounds/dialtone.wav"
+  busy_tone: "sounds/busy.wav"
+  error_tone: "sounds/error.wav"
+```
+
+---
+
+## Phase W4: Ring Settings UI
+
+### Goal
+Allow configuration of ring timing and behavior.
+
+### Backend Tasks
+- [ ] `GET /api/ring-settings` - Get ring configuration
+- [ ] `PUT /api/ring-settings` - Update ring settings
+- [ ] Validation: Values must be positive numbers within reasonable ranges
+
+### Frontend Tasks
+- [ ] Add "Ring Settings" section (could be in Settings tab)
+- [ ] Configurable fields:
+  - Ring duration (seconds) - how long the ring plays
+  - Ring pause (seconds) - silence between rings
+- [ ] Input validation with min/max
+- [ ] Test ring button (triggers a short ring on the phone)
+
+### Config Structure
+```yaml
+timing:
+  ring_duration: 2.0   # Ring on time
+  ring_pause: 4.0      # Ring off time
+```
+
+---
+
+## Phase W5: Call Log API & UI - COMPLETE
+
+### Goal
+Display call history with search and filtering.
+
+### Backend Tasks
+- [x] `GET /api/calls` - List recent calls (with pagination)
+  - Query params: `limit`, `offset`, `direction`, `status`, `search`
+- [x] `GET /api/calls/stats` - Get call statistics for dashboard
+- [x] `GET /api/calls/{id}` - Get single call details
+- [x] `DELETE /api/calls/{id}` - Delete a call record
+- [x] Wire up existing Database class methods
+
+### Frontend Tasks
+- [x] Add "Call Log" tab
+- [x] Table columns: Date/Time | Direction | Number | Duration | Status
+- [x] Direction icons: incoming/outgoing
+- [x] Status badges: completed (green), missed (yellow), failed (red)
+- [x] Search box (filters by phone number)
+- [x] Filter dropdowns (direction, status)
+- [x] Pagination (Previous/Next page buttons)
+- [x] Click to view details modal
+- [x] Call statistics widget (total calls, completed, missed, failed, avg duration)
+
+### Database (Already Exists)
+- `Database.get_recent_calls(limit)`
+- `Database.search_calls(start_date, end_date, direction, status, number_pattern)`
+- `Database.get_call_stats(days)`
+
+---
+
+## Phase W6: WebSocket Real-Time Updates
+
+### Goal
+Replace polling with WebSocket for instant status updates.
+
+### Backend Tasks
+- [ ] Add WebSocket endpoint: `ws://host:port/ws`
+- [ ] Create event types:
+  - `phone_state_changed` - When state changes (idle -> off_hook, etc.)
+  - `call_started` - New outbound/inbound call
+  - `call_ended` - Call terminated
+  - `digit_dialed` - Real-time digit display
+  - `config_changed` - Config was updated
+- [ ] Pub/sub system for broadcasting events
+- [ ] Connection management (heartbeat, reconnection)
+- [ ] Hook CallManager callbacks to emit WebSocket events
+
+### Frontend Tasks
+- [ ] WebSocket client with auto-reconnect
+- [ ] Update dashboard in real-time (no more polling)
+- [ ] Show live dialing as digits come in
+- [ ] Toast notifications for incoming calls
+- [ ] Connection status indicator
+- [ ] Graceful fallback to polling if WS fails
+
+### Event Format
+```json
+{
+  "type": "phone_state_changed",
+  "timestamp": "2024-01-15T10:30:00Z",
+  "data": {
+    "old_state": "idle",
+    "new_state": "ringing",
+    "caller_id": "+12065551234"
+  }
+}
+```
+
+---
+
+## Phase W7: WiFi Provisioning & Captive Portal
+
+### Goal
+Allow network configuration when phone isn't connected to WiFi.
+
+### Architecture
+When the phone boots and can't connect to WiFi:
+1. Creates Access Point (AP): `RotaryPhone-XXXX`
+2. Runs captive portal on 192.168.4.1
+3. User connects and configures WiFi
+4. Phone saves credentials and reboots into client mode
+
+### Backend Tasks - Network Module
+- [ ] Create `src/rotary_phone/network/wifi_manager.py`
+  - Scan available networks
+  - Connect to network
+  - Get connection status
+  - Get current IP address
+- [ ] Create `src/rotary_phone/network/access_point.py`
+  - Start/stop hostapd for AP mode
+  - Configure dnsmasq for DHCP/DNS
+  - Captive portal redirect
+
+### Backend Tasks - API
+- [ ] `GET /api/network/status` - Current connection status
+- [ ] `GET /api/network/scan` - List available WiFi networks
+- [ ] `POST /api/network/connect` - Connect to a network
+- [ ] `GET /api/network/ap-status` - AP mode status
+- [ ] `POST /api/network/ap/start` - Start AP mode manually
+- [ ] `POST /api/network/ap/stop` - Stop AP mode
+
+### Frontend Tasks - Captive Portal
+- [ ] Minimal HTML page (works without external resources)
+- [ ] Network list with signal strength
+- [ ] Password input for protected networks
+- [ ] Connect button with progress indicator
+- [ ] Success/failure message
+- [ ] Auto-redirect to main UI after connection
+
+### Frontend Tasks - Settings Page
+- [ ] Network section showing current connection
+- [ ] WiFi settings (SSID, signal, IP)
+- [ ] Change network button
+- [ ] AP mode settings (SSID, password)
+
+### Config Structure
+```yaml
+network:
+  wifi_ssid: "MyNetwork"
+  wifi_password: "password123"
+  ap_ssid: "RotaryPhone"
+  ap_password: "rotaryphone"
+```
+
+### System Dependencies
+- `hostapd` - Access point daemon
+- `dnsmasq` - DHCP and DNS for AP mode
+- `wpa_supplicant` - WiFi client
+
+---
+
+## Phase W8: Authentication & Security
+
+### Goal
+Protect the admin interface with authentication.
+
+### Backend Tasks
+- [ ] Session-based authentication (or JWT)
+- [ ] Login endpoint: `POST /api/auth/login`
+- [ ] Logout endpoint: `POST /api/auth/logout`
+- [ ] Auth middleware protecting all `/api/*` routes
+- [ ] Password hashing with bcrypt
+- [ ] Rate limiting on login attempts
+
+### Frontend Tasks
+- [ ] Login page (username/password form)
+- [ ] Session persistence (localStorage token)
+- [ ] Auto-redirect to login when 401
+- [ ] Logout button in header
+- [ ] Password change form in settings
+
+### Config Structure
+```yaml
+web:
+  auth_required: true
+  username: "admin"
+  password_hash: "$2b$12$..."  # bcrypt hash
+```
+
+---
+
+## Implementation Order & Dependencies
+
+```
+Phase W1: Allowlist ─────────────────┐
+Phase W2: Speed Dial ────────────────┼──► Can be done in parallel
+Phase W3: Sound Management ──────────┤
+Phase W4: Ring Settings ─────────────┘
+                                     │
+                                     ▼
+Phase W5: Call Log ──────────────────► Needs database integration
+                                     │
+                                     ▼
+Phase W6: WebSocket ─────────────────► Enhances all previous features
+                                     │
+                                     ▼
+Phase W7: WiFi Provisioning ─────────► Needs network module (independent)
+                                     │
+                                     ▼
+Phase W8: Authentication ────────────► Should be last (applies to all)
+```
+
+---
+
+## Technical Notes
+
+### Config Hot-Reload Strategy
+For Phases W1-W4, after saving config:
+1. Write to config.yml atomically (temp file + rename)
+2. Update ConfigManager in-memory state
+3. Notify relevant components via callback
+4. No restart required for most settings
+
+### Database Integration (Phase W5)
+The Database class already exists at [database.py](src/rotary_phone/database/database.py):
+- Thread-safe connection-per-operation
+- Full CallLog model with serialization
+- Search and stats methods ready to use
+
+### WebSocket (Phase W6)
+FastAPI has built-in WebSocket support:
+```python
+from fastapi import WebSocket
+
+@app.websocket("/ws")
+async def websocket_endpoint(websocket: WebSocket):
+    await websocket.accept()
+    # ...
+```
+
+### WiFi/AP Mode (Phase W7)
+Requires root access for:
+- `hostapd` control
+- `wpa_supplicant` control
+- Network interface configuration
+
+Consider running web server as root or using sudo for specific operations.
+
+---
+
+## File Structure After All Phases
+
+```
+src/rotary_phone/web/
+├── __init__.py
+├── app.py                    # Main FastAPI app (extended)
+├── auth.py                   # Authentication middleware
+├── api/
+│   ├── __init__.py
+│   ├── allowlist.py          # Phase W1
+│   ├── speed_dial.py         # Phase W2
+│   ├── sounds.py             # Phase W3 (moved from app.py)
+│   ├── ring_settings.py      # Phase W4
+│   └── calls.py              # Phase W5
+├── websocket/
+│   ├── __init__.py
+│   ├── manager.py            # Connection manager
+│   └── events.py             # Event types
+└── static/
+    ├── index.html            # Main SPA (extended)
+    └── captive.html          # Captive portal (Phase W7)
+
+src/rotary_phone/network/
+├── __init__.py
+├── wifi_manager.py           # Phase W7
+└── access_point.py           # Phase W7
+```
+
+---
+
+## Testing Strategy
+
+Each phase should include:
+1. **Unit tests** for new API endpoints (mock dependencies)
+2. **Integration tests** for database operations
+3. **Manual testing** via the UI
+
+Test files:
+- `tests/test_web_allowlist.py`
+- `tests/test_web_speed_dial.py`
+- `tests/test_web_sounds.py`
+- `tests/test_web_calls.py`
+- `tests/test_web_websocket.py`
+- `tests/test_network.py`
+
+---
+
+## Previous Phases (Completed)
+
+<details>
+<summary>Core Phone Controller (Phases 1-13) - COMPLETE</summary>
+
+### Phase 1: Foundation
+- [x] uv project setup
+- [x] pytest configuration
+- [x] Basic project structure
 
 ### Phase 2: Configuration Management
 - [x] ConfigManager class
-- [x] Load/validate YAML config
-- [x] Tests for config loading
-- [x] Commit: "Add configuration management"
+- [x] YAML config loading
 
 ### Phase 3: GPIO Abstraction Layer
-- [x] Abstract GPIO interface
-- [x] Mock GPIO implementation
-- [x] Auto-detect real vs mock
-- [x] Tests for both modes
-- [x] Commit: "Add GPIO abstraction layer"
+- [x] MockGPIO + RealGPIO
+- [x] Auto-detection
 
 ### Phase 4: Test Harness
-- [x] Interactive CLI for testing without hardware
-- [x] Simulate dial pulses, hook states
-- [x] Automated test scenarios
-- [x] Commit: "Add interactive test harness"
+- [x] Interactive CLI simulator
 
 ### Phase 5: Dial Reader
-- [x] DialReader class with pulse counting
-- [x] Background thread for timeout detection
-- [x] Tests with mock GPIO
-- [x] Test in harness
-- [x] Commit: "Add dial reader component"
+- [x] Pulse counting with timeout
 
 ### Phase 6: Hook Monitor
-- [x] HookMonitor class
-- [x] Debouncing logic
-- [x] Tests
-- [x] Commit: "Add hook monitor component"
+- [x] Debounced hook detection
 
 ### Phase 7: Ringer
-- [x] Ringer class with audio playback
-- [x] Ring pattern logic
-- [x] Tests
-- [x] Commit: "Add ringer component"
+- [x] Audio playback with patterns
 
 ### Phase 8: SIP Client
-- [x] SIPClient abstract base class
-- [x] InMemorySIPClient for testing
-- [x] PyVoIPClient for real VoIP calls (using pyVoIP library)
-- [x] Account registration (simulated + real)
-- [x] Call handling (make/receive/answer/hangup)
-- [x] Call state management
-- [x] Callback system (incoming call, answered, ended)
-- [x] Background thread for call state monitoring
-- [x] 25 comprehensive unit tests (InMemorySIPClient)
-- [x] Docker integration tests with SIPp
-- [x] Manual test script for real SIP provider (voip.ms)
-- [x] Commit: "Add SIP client abstraction"
-- [x] Commit: "Add pyVoIP real SIP client implementation"
-- [x] Commit: "Add integration tests (Docker SIPp + manual real provider)"
+- [x] Abstract SIP interface
+- [x] InMemorySIPClient for tests
+- [x] PyVoIPClient for real calls
 
 ### Phase 9: Call Manager
-- [x] CallManager with state machine
-- [x] Speed dial / allowlist logic
-- [x] 24 comprehensive tests
-- [x] Commit: "Add call manager with state machine"
+- [x] State machine
+- [x] Speed dial / allowlist
 
 ### Phase 10: Phone Controller Integration
-- [x] Wire all components together in main.py
-- [x] Main event loop with signal handling
-- [x] 11 end-to-end integration tests (4 passing, 7 need timing fixes)
-- [x] System fully integrated and functional
-- [x] Commit: "Complete phone controller integration (Phase 10)"
+- [x] All components wired together
 
 ### Phase 11: Systemd Service
-- [x] Service file
-- [x] Installation script
-- [x] Documentation
-- [x] Commit: "Add systemd service support"
+- [x] Service file and install script
 
-### Phase 12: Add dial tone when off the hook
-- [x] Create DialTone class for audio playback
-- [x] Integrate into CallManager state machine
-- [x] Add 11 comprehensive tests
-- [x] Commit: "Add dial tone when off-hook"
+### Phase 12: Dial Tone
+- [x] Play dial tone when off-hook
 
-### Phase 13: Add call logging (Sqlite DB)
-- [x] Create database/models.py with CallLog dataclass
-- [x] Create database/database.py with sqlite3 operations
-- [x] Create call_logger.py integration layer
-- [x] Integrate CallLogger into CallManager
-- [x] Update configuration with database settings
-- [x] Add 35 comprehensive tests
-- [x] Commit: "Add call logging with SQLite database"
+### Phase 13: Call Logging
+- [x] SQLite database
+- [x] CallLog model
+- [x] Full CRUD operations
 
-### Phase 14: track config changes
-
-## Part 2: Web Admin (Future)
-After the core phone controller is working, we'll add the web admin interface as a separate component/process that can control and monitor the phone.
-
-Each phase will be small, tested, and committed individually.
+</details>

@@ -2,21 +2,25 @@
 
 import logging
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
-from fastapi import FastAPI, HTTPException, Request, UploadFile
+from fastapi import FastAPI, HTTPException, Query, Request, UploadFile
 from fastapi.responses import FileResponse, PlainTextResponse
 from fastapi.staticfiles import StaticFiles
 
 from rotary_phone.call_manager import CallManager
 from rotary_phone.config import ConfigManager
 from rotary_phone.config.config_manager import ConfigError
+from rotary_phone.database import Database
 
 logger = logging.getLogger(__name__)
 
 
-def create_app(  # pylint: disable=too-many-statements
-    call_manager: CallManager, config_manager: ConfigManager, config_path: str
+def create_app(  # pylint: disable=too-many-statements,too-many-locals
+    call_manager: CallManager,
+    config_manager: ConfigManager,
+    config_path: str,
+    database: Optional[Database] = None,
 ) -> FastAPI:
     """Create and configure FastAPI application.
 
@@ -24,6 +28,7 @@ def create_app(  # pylint: disable=too-many-statements
         call_manager: CallManager instance
         config_manager: ConfigManager instance
         config_path: Path to the configuration file
+        database: Database instance for call logs (optional)
 
     Returns:
         Configured FastAPI application
@@ -38,6 +43,7 @@ def create_app(  # pylint: disable=too-many-statements
     app.state.call_manager = call_manager
     app.state.config_manager = config_manager
     app.state.config_path = config_path
+    app.state.database = database
 
     # Serve static files
     static_dir = Path(__file__).parent / "static"
@@ -184,5 +190,233 @@ def create_app(  # pylint: disable=too-many-statements
         except Exception as e:
             raise HTTPException(status_code=500, detail=f"Failed to upload file: {e}") from e
 
+    # -------------------------------------------------------------------------
+    # Call Log API
+    # -------------------------------------------------------------------------
+
+    @app.get("/api/calls")
+    async def get_calls(
+        limit: int = Query(default=50, ge=1, le=500),
+        offset: int = Query(default=0, ge=0),
+        direction: Optional[str] = Query(default=None),
+        status: Optional[str] = Query(default=None),
+        search: Optional[str] = Query(default=None),
+    ) -> Dict[str, Any]:
+        """Get call log entries with pagination and filtering.
+
+        Args:
+            limit: Maximum number of calls to return (1-500)
+            offset: Number of records to skip for pagination
+            direction: Filter by direction ("inbound" or "outbound")
+            status: Filter by status ("completed", "missed", "failed", "rejected")
+            search: Search term for phone number
+
+        Returns:
+            Dictionary with calls array and pagination info
+        """
+        db = app.state.database
+        if db is None:
+            raise HTTPException(status_code=503, detail="Database not configured")
+
+        # Validate direction
+        if direction and direction not in ("inbound", "outbound"):
+            raise HTTPException(
+                status_code=400,
+                detail="Invalid direction. Must be 'inbound' or 'outbound'",
+            )
+
+        # Validate status
+        valid_statuses = ("completed", "missed", "failed", "rejected")
+        if status and status not in valid_statuses:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Invalid status. Must be one of: {', '.join(valid_statuses)}",
+            )
+
+        # Use search_calls for filtering
+        calls = db.search_calls(
+            direction=direction,
+            status=status,
+            number_pattern=search,
+            limit=limit + offset + 1,  # Fetch extra to determine if there are more
+        )
+
+        # Apply offset manually (search_calls doesn't support offset directly)
+        total_before_offset = len(calls)
+        calls = calls[offset : offset + limit]
+
+        # Determine if there are more results
+        has_more = total_before_offset > offset + limit
+
+        return {
+            "calls": [call.to_dict() for call in calls],
+            "pagination": {
+                "limit": limit,
+                "offset": offset,
+                "has_more": has_more,
+                "returned": len(calls),
+            },
+        }
+
+    @app.get("/api/calls/stats")
+    async def get_call_stats(
+        days: int = Query(default=7, ge=1, le=365),
+    ) -> Dict[str, Any]:
+        """Get call statistics for dashboard.
+
+        Args:
+            days: Number of days to include in stats (1-365)
+
+        Returns:
+            Dictionary with call statistics
+        """
+        db = app.state.database
+        if db is None:
+            raise HTTPException(status_code=503, detail="Database not configured")
+
+        stats = db.get_call_stats(days=days)
+        return {"stats": stats, "days": days}
+
+    @app.get("/api/calls/{call_id}")
+    async def get_call(call_id: int) -> Dict[str, Any]:
+        """Get a single call by ID.
+
+        Args:
+            call_id: Call record ID
+
+        Returns:
+            Call details
+        """
+        db = app.state.database
+        if db is None:
+            raise HTTPException(status_code=503, detail="Database not configured")
+
+        call = db.get_call(call_id)
+        if call is None:
+            raise HTTPException(status_code=404, detail="Call not found")
+
+        return {"call": call.to_dict()}
+
+    @app.delete("/api/calls/{call_id}")
+    async def delete_call(call_id: int) -> Dict[str, Any]:
+        """Delete a call record.
+
+        Args:
+            call_id: Call record ID to delete
+
+        Returns:
+            Success message
+        """
+        db = app.state.database
+        if db is None:
+            raise HTTPException(status_code=503, detail="Database not configured")
+
+        # Check if call exists first
+        call = db.get_call(call_id)
+        if call is None:
+            raise HTTPException(status_code=404, detail="Call not found")
+
+        # Delete the call
+        with db._connection() as conn:  # pylint: disable=protected-access
+            conn.execute("DELETE FROM call_logs WHERE id = ?", (call_id,))
+            conn.commit()
+
+        return {"success": True, "message": f"Call {call_id} deleted"}
+
+    # -------------------------------------------------------------------------
+    # Allowlist API
+    # -------------------------------------------------------------------------
+
+    @app.get("/api/allowlist")
+    async def get_allowlist() -> Dict[str, Any]:
+        """Get current allowlist configuration."""
+        allowlist: List[str] = app.state.config_manager.get("allowlist", [])
+        return {
+            "allowlist": allowlist,
+            "allow_all": "*" in allowlist,
+        }
+
+    @app.put("/api/allowlist")
+    async def update_allowlist(request: Request) -> Dict[str, Any]:
+        """Update the allowlist.
+
+        Accepts JSON body with:
+        - allowlist: array of phone number patterns (or ["*"] for allow all)
+        """
+        try:
+            data = await request.json()
+        except Exception as e:
+            raise HTTPException(status_code=400, detail=f"Invalid JSON: {e}") from e
+
+        if "allowlist" not in data:
+            raise HTTPException(status_code=400, detail="Missing 'allowlist' field")
+
+        new_allowlist = data["allowlist"]
+
+        # Validate it's a list
+        if not isinstance(new_allowlist, list):
+            raise HTTPException(status_code=400, detail="'allowlist' must be an array")
+
+        # Validate each entry
+        for i, entry in enumerate(new_allowlist):
+            if not isinstance(entry, str):
+                raise HTTPException(status_code=400, detail=f"Entry {i} must be a string")
+            # Allow "*" wildcard or phone numbers (basic validation)
+            if entry != "*" and not _is_valid_phone_pattern(entry):
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Invalid phone pattern at index {i}: '{entry}'",
+                )
+
+        try:
+            # Update in-memory config
+            app.state.config_manager.update_config({"allowlist": new_allowlist})
+
+            # Save to file
+            app.state.config_manager.save_config(app.state.config_path)
+
+            return {
+                "success": True,
+                "message": "Allowlist updated successfully",
+                "allowlist": new_allowlist,
+                "allow_all": "*" in new_allowlist,
+            }
+        except ConfigError as e:
+            raise HTTPException(status_code=400, detail=str(e)) from e
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Failed to save allowlist: {e}") from e
+
     logger.info("FastAPI application created")
     return app
+
+
+def _is_valid_phone_pattern(pattern: str) -> bool:
+    """Validate a phone number pattern.
+
+    Accepts:
+    - Numbers starting with + followed by digits (e.g., +12065551234)
+    - Plain digit strings (e.g., 911, 5551234)
+    - Numbers with common separators that will be stripped
+
+    Args:
+        pattern: Phone number pattern to validate
+
+    Returns:
+        True if pattern appears to be a valid phone number
+    """
+    if not pattern:
+        return False
+
+    # Strip common separators for validation
+    cleaned = pattern.replace("-", "").replace(" ", "").replace("(", "").replace(")", "")
+
+    # Must start with + or digit
+    if not cleaned:
+        return False
+
+    if cleaned[0] == "+":
+        # International format: + followed by at least 2 digits (country code + something)
+        return len(cleaned) >= 3 and cleaned[1:].isdigit()
+
+    # Plain digits
+    return cleaned.isdigit()

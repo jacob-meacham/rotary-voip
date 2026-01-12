@@ -6,7 +6,7 @@ import signal
 import sys
 import time
 from dataclasses import dataclass
-from typing import Any, Dict, NoReturn, Optional
+from typing import Any, Dict, NoReturn, Optional, Tuple
 
 from rotary_phone.call_logger import CallLogger
 from rotary_phone.call_manager import CallManager
@@ -161,14 +161,16 @@ def _init_sip_client(config: ConfigManager, mock_mode: bool) -> SIPClient:
     )
 
 
-def _init_call_logging(config: ConfigManager) -> Optional[CallLogger]:
+def _init_call_logging(
+    config: ConfigManager,
+) -> Tuple[Optional[CallLogger], Optional[Database]]:
     """Initialize call logging database and logger.
 
     Args:
         config: Configuration manager
 
     Returns:
-        CallLogger instance, or None if initialization fails
+        Tuple of (CallLogger instance, Database instance), or (None, None) if fails
     """
     try:
         db_config: Dict[str, Any] = config.get("database", {})
@@ -185,20 +187,26 @@ def _init_call_logging(config: ConfigManager) -> Optional[CallLogger]:
             if deleted > 0:
                 logger.info("  - Cleaned up %d old call logs", deleted)
 
-        return call_logger
+        return call_logger, database
 
     except Exception as e:
         logger.warning("Failed to initialize call logging: %s (continuing without)", e)
-        return None
+        return None, None
 
 
-def _start_web_server(call_manager: CallManager, config: ConfigManager, config_path: str) -> None:
+def _start_web_server(
+    call_manager: CallManager,
+    config: ConfigManager,
+    config_path: str,
+    database: Optional[Database] = None,
+) -> None:
     """Start the web admin interface in a background thread.
 
     Args:
         call_manager: CallManager instance
         config: Configuration manager
         config_path: Path to config file (for saving changes)
+        database: Database instance for call logs (optional)
     """
     # pylint: disable=import-outside-toplevel
     from threading import Thread
@@ -208,7 +216,12 @@ def _start_web_server(call_manager: CallManager, config: ConfigManager, config_p
     from rotary_phone.web.app import create_app
 
     # Create FastAPI app
-    web_app = create_app(call_manager=call_manager, config_manager=config, config_path=config_path)
+    web_app = create_app(
+        call_manager=call_manager,
+        config_manager=config,
+        config_path=config_path,
+        database=database,
+    )
 
     # Start FastAPI in daemon thread
     def run_web_server() -> None:
@@ -393,7 +406,7 @@ def main() -> NoReturn:  # pylint: disable=too-many-statements
 
     # Initialize call logging database
     logger.info("Initializing call logging...")
-    call_logger = _init_call_logging(config)
+    call_logger, database = _init_call_logging(config)
 
     # Initialize CallManager to wire everything together
     logger.info("Initializing CallManager...")
@@ -434,7 +447,7 @@ def main() -> NoReturn:  # pylint: disable=too-many-statements
     if config.get("web.enabled", False):
         logger.info("Starting web admin interface...")
         try:
-            _start_web_server(call_manager, config, args.config)
+            _start_web_server(call_manager, config, args.config, database)
         except Exception as e:
             logger.error("Failed to start web admin interface: %s", e)
             logger.warning("Continuing without web interface...")
