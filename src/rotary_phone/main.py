@@ -5,17 +5,19 @@ import logging
 import signal
 import sys
 import time
-from typing import NoReturn, Optional
+from typing import Any, Dict, NoReturn
 
 from rotary_phone.call_manager import CallManager
 from rotary_phone.config import ConfigManager
 from rotary_phone.config.config_manager import ConfigError
 from rotary_phone.hardware import get_gpio
 from rotary_phone.hardware.dial_reader import DialReader
+from rotary_phone.hardware.dial_tone import DialTone
 from rotary_phone.hardware.hook_monitor import HookMonitor
 from rotary_phone.hardware.ringer import Ringer
 from rotary_phone.sip.in_memory_client import InMemorySIPClient
 from rotary_phone.sip.pyvoip_client import PyVoIPClient
+from rotary_phone.sip.sip_client import SIPClient
 
 
 def setup_logging(debug: bool = False) -> None:
@@ -128,7 +130,7 @@ def main() -> NoReturn:
         logger.info("  - DialReader initialized")
 
         # Get optional ring sound file from hardware config
-        hardware_config = config.get("hardware", {})
+        hardware_config: Dict[str, Any] = config.get("hardware", {})
         ring_sound_file = hardware_config.get("ring_sound_file")
 
         ringer = Ringer(
@@ -139,12 +141,22 @@ def main() -> NoReturn:
         )
         logger.info("  - Ringer initialized")
 
+        # Initialize dial tone player
+        audio_config: Dict[str, Any] = config.get("audio", {})
+        dial_tone_file = audio_config.get("dial_tone")
+        dial_tone = DialTone(sound_file=dial_tone_file)
+        if dial_tone_file:
+            logger.info("  - DialTone initialized with: %s", dial_tone_file)
+        else:
+            logger.info("  - DialTone disabled (no sound file configured)")
+
     except Exception as e:
         logger.error("Failed to initialize hardware components: %s", e)
         sys.exit(1)
 
     # Initialize SIP client (use in-memory for mock mode, PyVoIP for real)
     logger.info("Initializing SIP client...")
+    sip_client: SIPClient
     try:
         if args.mock_gpio or not sip_config.get("server"):
             logger.info("  - Using InMemorySIPClient (mock mode)")
@@ -166,6 +178,7 @@ def main() -> NoReturn:
             dial_reader=dial_reader,
             ringer=ringer,
             sip_client=sip_client,
+            dial_tone=dial_tone,
         )
         logger.info("  - CallManager initialized")
 
@@ -175,9 +188,8 @@ def main() -> NoReturn:
 
     # Set up signal handlers for graceful shutdown
     shutdown_requested = False
-    manager_ref: Optional[CallManager] = call_manager
 
-    def signal_handler(signum: int, frame: object) -> None:
+    def signal_handler(signum: int, _frame: object) -> None:
         nonlocal shutdown_requested
         if shutdown_requested:
             logger.warning("Force quit!")

@@ -12,6 +12,7 @@ from typing import Optional
 
 from rotary_phone.config.config_manager import ConfigManager
 from rotary_phone.hardware.dial_reader import DialReader
+from rotary_phone.hardware.dial_tone import DialTone
 from rotary_phone.hardware.hook_monitor import HookMonitor, HookState
 from rotary_phone.hardware.ringer import Ringer
 from rotary_phone.sip.sip_client import CallState, SIPClient
@@ -51,6 +52,7 @@ class CallManager:
         dial_reader: DialReader,
         ringer: Ringer,
         sip_client: SIPClient,
+        dial_tone: Optional[DialTone] = None,
     ) -> None:
         """Initialize the call manager.
 
@@ -60,12 +62,14 @@ class CallManager:
             dial_reader: Rotary dial reader
             ringer: Ringer control
             sip_client: SIP client for VoIP calls
+            dial_tone: Optional dial tone player
         """
         self._config = config
         self._hook_monitor = hook_monitor
         self._dial_reader = dial_reader
         self._ringer = ringer
         self._sip_client = sip_client
+        self._dial_tone = dial_tone
 
         self._state = PhoneState.IDLE
         self._dialed_number = ""
@@ -86,13 +90,17 @@ class CallManager:
         self._running = True
         logger.info("Starting CallManager")
 
-        # Wire up callbacks
-        self._hook_monitor._on_off_hook = self._on_off_hook
-        self._hook_monitor._on_on_hook = self._on_on_hook
-        self._dial_reader._on_digit = self._on_digit
-        self._sip_client._on_incoming_call = self._on_incoming_call
-        self._sip_client._on_call_answered = self._on_call_answered
-        self._sip_client._on_call_ended = self._on_call_ended
+        # Wire up callbacks using proper setter methods
+        self._hook_monitor.set_callbacks(
+            on_off_hook=self._on_off_hook,
+            on_on_hook=self._on_on_hook,
+        )
+        self._dial_reader.set_on_digit_callback(self._on_digit)
+        self._sip_client.set_callbacks(
+            on_incoming_call=self._on_incoming_call,
+            on_call_answered=self._on_call_answered,
+            on_call_ended=self._on_call_ended,
+        )
 
         # Start components
         self._hook_monitor.start()
@@ -196,6 +204,9 @@ class CallManager:
                 # User picked up phone, wait for dialing
                 self._dialed_number = ""
                 self._transition_to(PhoneState.OFF_HOOK_WAITING)
+                # Start dial tone
+                if self._dial_tone:
+                    self._dial_tone.start()
 
             elif self._state == PhoneState.RINGING:
                 # User answered incoming call
@@ -217,6 +228,10 @@ class CallManager:
             if self._digit_timer:
                 self._digit_timer.cancel()
                 self._digit_timer = None
+
+            # Stop dial tone if playing
+            if self._dial_tone:
+                self._dial_tone.stop()
 
             # Stop ringer if ringing
             if self._state == PhoneState.RINGING:
@@ -249,6 +264,9 @@ class CallManager:
 
             # Transition to DIALING if this is the first digit
             if self._state == PhoneState.OFF_HOOK_WAITING:
+                # Stop dial tone when user starts dialing
+                if self._dial_tone:
+                    self._dial_tone.stop()
                 self._transition_to(PhoneState.DIALING)
 
             # Append digit
@@ -316,7 +334,9 @@ class CallManager:
             logger.info("Incoming call from: %s", caller_id)
 
             if self._state != PhoneState.IDLE:
-                logger.warning("Ignoring incoming call, phone not idle (state: %s)", self._state.value)
+                logger.warning(
+                    "Ignoring incoming call, phone not idle (state: %s)", self._state.value
+                )
                 return
 
             # Start ringing
@@ -351,4 +371,8 @@ class CallManager:
             else:
                 # Phone is still off-hook, wait for user to hang up
                 logger.info("Call ended but phone still off-hook, waiting for hangup")
+                self._dialed_number = ""
                 self._transition_to(PhoneState.OFF_HOOK_WAITING)
+                # Start dial tone again so user can make another call
+                if self._dial_tone:
+                    self._dial_tone.start()
