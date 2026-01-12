@@ -232,3 +232,67 @@ class ConfigManager:
             Complete configuration dictionary
         """
         return self._config.copy()
+
+    def update_config(self, updates: Dict[str, Any]) -> None:
+        """Update configuration values with validation.
+
+        Args:
+            updates: Dictionary of config updates (dot notation keys)
+
+        Raises:
+            ConfigError: If updates would make config invalid
+        """
+        # Apply updates to _config
+        for key, value in updates.items():
+            keys = key.split(".")
+            d = self._config
+            for k in keys[:-1]:
+                d = d.setdefault(k, {})
+            d[keys[-1]] = value
+
+        # Validate before accepting changes
+        self._validate_config()
+
+    def save_config(self, output_path: str) -> None:
+        """Save current configuration to YAML file (atomic write).
+
+        Args:
+            output_path: Path to save configuration file
+
+        Raises:
+            ConfigError: If save fails
+        """
+        # pylint: disable=import-outside-toplevel
+        import os
+        import shutil
+        import tempfile
+
+        tmp_path = None
+        try:
+            # Write to temp file first (atomic operation)
+            with tempfile.NamedTemporaryFile(
+                mode="w", delete=False, suffix=".yaml", encoding="utf-8"
+            ) as tmp:
+                yaml.dump(self._config, tmp, default_flow_style=False, allow_unicode=True)
+                tmp_path = tmp.name
+
+            # Atomic rename
+            shutil.move(tmp_path, output_path)
+            logger.info("Configuration saved to %s", output_path)
+
+        except Exception as e:
+            if tmp_path and os.path.exists(tmp_path):
+                os.unlink(tmp_path)
+            raise ConfigError(f"Failed to save config: {e}") from e
+
+    def to_dict_safe(self) -> Dict[str, Any]:
+        """Export config with sensitive data masked.
+
+        Returns:
+            Config dict with passwords masked
+        """
+        config = self.to_dict()
+        # Mask SIP password
+        if "sip" in config and "password" in config["sip"]:
+            config["sip"]["password"] = "***MASKED***"
+        return config

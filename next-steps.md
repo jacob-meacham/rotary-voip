@@ -209,6 +209,13 @@ After foundation, we'll build incrementally:
 - [x] Commit: "Add dial tone when off-hook"
 
 ### Phase 13: Add call logging (Sqlite DB)
+- [x] Create database/models.py with CallLog dataclass
+- [x] Create database/database.py with sqlite3 operations
+- [x] Create call_logger.py integration layer
+- [x] Integrate CallLogger into CallManager
+- [x] Update configuration with database settings
+- [x] Add 35 comprehensive tests
+- [x] Commit: "Add call logging with SQLite database"
 
 ### Phase 14: track config changes
 

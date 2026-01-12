@@ -19,17 +19,7 @@ This is a Rotary Phone VoIP Conversion project that converts vintage rotary phon
 
 ### Testing
 ```bash
-# Run all tests
-python -m pytest tests/
-
-# Run specific test file
-python -m pytest tests/test_dial_reader.py
-
-# Run with coverage
-python -m pytest --cov=src --cov-report=html tests/
-
-# Run test harness with mock GPIO
-python tests/test_harness.py
+./check.sh
 ```
 
 ### Running the Application
