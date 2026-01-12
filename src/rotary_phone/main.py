@@ -7,9 +7,11 @@ import sys
 import time
 from typing import Any, Dict, NoReturn
 
+from rotary_phone.call_logger import CallLogger
 from rotary_phone.call_manager import CallManager
 from rotary_phone.config import ConfigManager
 from rotary_phone.config.config_manager import ConfigError
+from rotary_phone.database import Database
 from rotary_phone.hardware import get_gpio
 from rotary_phone.hardware.dial_reader import DialReader
 from rotary_phone.hardware.dial_tone import DialTone
@@ -169,6 +171,28 @@ def main() -> NoReturn:
         logger.error("Failed to initialize SIP client: %s", e)
         sys.exit(1)
 
+    # Initialize call logging database
+    logger.info("Initializing call logging...")
+    call_logger = None
+    try:
+        db_config: Dict[str, Any] = config.get("database", {})
+        db_path = db_config.get("path", "calls.db")
+        database = Database(db_path)
+        database.init_db()
+        call_logger = CallLogger(database)
+        logger.info("  - Call logging initialized (database: %s)", db_path)
+
+        # Run cleanup if configured
+        cleanup_days = db_config.get("cleanup_days", 365)
+        if cleanup_days > 0:
+            deleted = database.cleanup_old_calls(cleanup_days)
+            if deleted > 0:
+                logger.info("  - Cleaned up %d old call logs", deleted)
+
+    except Exception as e:
+        logger.warning("Failed to initialize call logging: %s (continuing without)", e)
+        call_logger = None
+
     # Initialize CallManager to wire everything together
     logger.info("Initializing CallManager...")
     try:
@@ -179,6 +203,7 @@ def main() -> NoReturn:
             ringer=ringer,
             sip_client=sip_client,
             dial_tone=dial_tone,
+            call_logger=call_logger,
         )
         logger.info("  - CallManager initialized")
 

@@ -35,6 +35,11 @@ audio:
   busy_tone: "sounds/busy.wav"            # Path to busy signal
   error_tone: "sounds/error.wav"          # Path to error tone
 
+# Database Settings
+database:
+  path: "calls.db"              # SQLite database path for call logs
+  cleanup_days: 365             # Auto-delete call logs older than this (0 = never)
+
 # Logging
 logging:
   level: "INFO"                 # DEBUG, INFO, WARNING, ERROR

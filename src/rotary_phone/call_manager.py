@@ -10,6 +10,7 @@ import threading
 from enum import Enum
 from typing import Optional
 
+from rotary_phone.call_logger import CallLogger
 from rotary_phone.config.config_manager import ConfigManager
 from rotary_phone.hardware.dial_reader import DialReader
 from rotary_phone.hardware.dial_tone import DialTone
@@ -53,6 +54,7 @@ class CallManager:
         ringer: Ringer,
         sip_client: SIPClient,
         dial_tone: Optional[DialTone] = None,
+        call_logger: Optional[CallLogger] = None,
     ) -> None:
         """Initialize the call manager.
 
@@ -63,6 +65,7 @@ class CallManager:
             ringer: Ringer control
             sip_client: SIP client for VoIP calls
             dial_tone: Optional dial tone player
+            call_logger: Optional call logger for persistence
         """
         self._config = config
         self._hook_monitor = hook_monitor
@@ -70,6 +73,7 @@ class CallManager:
         self._ringer = ringer
         self._sip_client = sip_client
         self._dial_tone = dial_tone
+        self._call_logger = call_logger
 
         self._state = PhoneState.IDLE
         self._dialed_number = ""
@@ -78,6 +82,7 @@ class CallManager:
         self._error_message = ""
         self._lock = threading.RLock()
         self._running = False
+        self._current_caller_id = ""  # Track caller ID for logging
 
         logger.debug("CallManager initialized")
 
@@ -214,9 +219,17 @@ class CallManager:
                 self._ringer.stop_ringing()
                 try:
                     self._sip_client.answer_call()
+                    # Log call answered (for incoming calls)
+                    if self._call_logger:
+                        self._call_logger.on_call_answered()
                     self._transition_to(PhoneState.CONNECTED)
                 except Exception as e:
                     logger.error("Failed to answer call: %s", e)
+                    # Log failed answer attempt
+                    if self._call_logger:
+                        self._call_logger.on_call_ended(
+                            status="failed", error_message=f"Failed to answer: {e}"
+                        )
                     self._transition_to(PhoneState.ERROR, f"Failed to answer: {e}")
 
     def _on_on_hook(self) -> None:
@@ -233,12 +246,25 @@ class CallManager:
             if self._dial_tone:
                 self._dial_tone.stop()
 
-            # Stop ringer if ringing
+            # Cancel call logger tracking if user hung up while dialing
+            if self._state in (PhoneState.OFF_HOOK_WAITING, PhoneState.DIALING):
+                if self._call_logger:
+                    self._call_logger.cancel_current_call()
+
+            # Stop ringer if ringing (and log missed call)
             if self._state == PhoneState.RINGING:
                 self._ringer.stop_ringing()
+                # Log as missed call (user ignored incoming call)
+                if self._call_logger:
+                    self._call_logger.on_call_ended(status="missed")
+                self._current_caller_id = ""
 
             # Hangup if in a call
             if self._state in (PhoneState.CALLING, PhoneState.CONNECTED):
+                # Log call ended by user hanging up
+                if self._call_logger:
+                    status = "completed" if self._state == PhoneState.CONNECTED else "unanswered"
+                    self._call_logger.on_call_ended(status=status)
                 try:
                     self._sip_client.hangup()
                 except Exception as e:
@@ -246,6 +272,7 @@ class CallManager:
 
             # Reset to idle
             self._dialed_number = ""
+            self._current_caller_id = ""
             self._transition_to(PhoneState.IDLE)
 
     def _on_digit(self, digit: str) -> None:
@@ -298,30 +325,48 @@ class CallManager:
 
     def _validate_and_call(self) -> None:
         """Validate the dialed number and initiate call (must be called with lock held)."""
-        number = self._dialed_number
+        dialed = self._dialed_number
 
         # Transition to validating state
         self._transition_to(PhoneState.VALIDATING)
 
         # Check speed dial first
-        speed_dial_number = self._config.get_speed_dial(number)
+        speed_dial_code: Optional[str] = None
+        destination = dialed
+        speed_dial_number = self._config.get_speed_dial(dialed)
         if speed_dial_number:
-            logger.info("Speed dial %s -> %s", number, speed_dial_number)
-            number = speed_dial_number
+            logger.info("Speed dial %s -> %s", dialed, speed_dial_number)
+            speed_dial_code = dialed
+            destination = speed_dial_number
 
         # Check allowlist
-        if not self._config.is_allowed(number):
-            logger.warning("Number %s is not in allowlist", number)
-            self._transition_to(PhoneState.ERROR, f"Number {number} is not allowed")
+        if not self._config.is_allowed(destination):
+            logger.warning("Number %s is not in allowlist", destination)
+            # Log rejected call
+            if self._call_logger:
+                self._call_logger.on_call_rejected(dialed, f"Number {destination} is not allowed")
+            self._transition_to(PhoneState.ERROR, f"Number {destination} is not allowed")
             return
 
         # Number is allowed, initiate call
-        logger.info("Calling %s", number)
+        logger.info("Calling %s", destination)
+
+        # Start tracking the call
+        if self._call_logger:
+            self._call_logger.on_outbound_call_started(
+                dialed_number=dialed,
+                destination=destination,
+                speed_dial_code=speed_dial_code,
+            )
+
         try:
-            self._sip_client.make_call(number)
+            self._sip_client.make_call(destination)
             self._transition_to(PhoneState.CALLING)
         except Exception as e:
             logger.error("Failed to make call: %s", e)
+            # Log failed call
+            if self._call_logger:
+                self._call_logger.on_call_ended(status="failed", error_message=str(e))
             self._transition_to(PhoneState.ERROR, f"Call failed: {e}")
 
     def _on_incoming_call(self, caller_id: str) -> None:
@@ -339,6 +384,13 @@ class CallManager:
                 )
                 return
 
+            # Track caller ID for logging
+            self._current_caller_id = caller_id
+
+            # Start tracking the incoming call
+            if self._call_logger:
+                self._call_logger.on_inbound_call_started(caller_id)
+
             # Start ringing
             self._ringer.start_ringing()
             self._transition_to(PhoneState.RINGING)
@@ -352,6 +404,10 @@ class CallManager:
                 logger.warning("Call answered in unexpected state: %s", self._state.value)
                 return
 
+            # Log call answered
+            if self._call_logger:
+                self._call_logger.on_call_answered()
+
             self._transition_to(PhoneState.CONNECTED)
 
     def _on_call_ended(self) -> None:
@@ -359,9 +415,19 @@ class CallManager:
         with self._lock:
             logger.info("Call ended")
 
+            # Determine call status for logging
+            call_status = self._determine_call_status()
+
+            # Log call ended
+            if self._call_logger:
+                self._call_logger.on_call_ended(status=call_status)
+
             # Stop ringer if it was ringing
             if self._state == PhoneState.RINGING:
                 self._ringer.stop_ringing()
+
+            # Clear caller ID tracking
+            self._current_caller_id = ""
 
             # Return to idle if phone is on-hook, otherwise wait for user to hang up
             hook_state = self._hook_monitor.get_state()
@@ -376,3 +442,20 @@ class CallManager:
                 # Start dial tone again so user can make another call
                 if self._dial_tone:
                     self._dial_tone.start()
+
+    def _determine_call_status(self) -> str:
+        """Determine the final status of a call based on current state.
+
+        Returns:
+            Status string: "completed", "missed", "unanswered", or "failed"
+        """
+        if self._state == PhoneState.RINGING:
+            # Incoming call that was never answered
+            return "missed"
+        if self._state == PhoneState.CALLING:
+            # Outbound call that was never answered
+            return "unanswered"
+        if self._state == PhoneState.CONNECTED:
+            # Call was connected and ended normally
+            return "completed"
+        return "unknown"
