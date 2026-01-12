@@ -25,7 +25,7 @@ def test_hook_monitor_initial_state_on_hook(mock_gpio: MockGPIO) -> None:
     # Ensure pin is HIGH (on-hook)
     mock_gpio.setup(HOOK, GPIO.IN, pull_up_down=GPIO.PUD_UP)
 
-    monitor = HookMonitor(gpio=mock_gpio, debounce_time=0.05)
+    monitor = HookMonitor(gpio=mock_gpio)
     monitor.start()
 
     assert monitor.get_state() == HookState.ON_HOOK
@@ -39,7 +39,7 @@ def test_hook_monitor_initial_state_off_hook(mock_gpio: MockGPIO) -> None:
     mock_gpio.setup(HOOK, GPIO.IN, pull_up_down=GPIO.PUD_UP)
     mock_gpio.set_input(HOOK, GPIO.LOW)
 
-    monitor = HookMonitor(gpio=mock_gpio, debounce_time=0.05)
+    monitor = HookMonitor(gpio=mock_gpio)
     monitor.start()
 
     assert monitor.get_state() == HookState.OFF_HOOK
@@ -51,7 +51,6 @@ def test_hook_monitor_pick_up(mock_gpio: MockGPIO, hook_events: List[str]) -> No
     """Test phone pick-up detection (on-hook -> off-hook)."""
     monitor = HookMonitor(
         gpio=mock_gpio,
-        debounce_time=0.05,
         on_off_hook=lambda: hook_events.append("off_hook"),
     )
     monitor.start()
@@ -76,7 +75,6 @@ def test_hook_monitor_hang_up(mock_gpio: MockGPIO, hook_events: List[str]) -> No
 
     monitor = HookMonitor(
         gpio=mock_gpio,
-        debounce_time=0.05,
         on_on_hook=lambda: hook_events.append("on_hook"),
     )
     monitor.start()
@@ -97,7 +95,6 @@ def test_hook_monitor_multiple_state_changes(mock_gpio: MockGPIO, hook_events: L
     """Test multiple pick up / hang up cycles."""
     monitor = HookMonitor(
         gpio=mock_gpio,
-        debounce_time=0.05,
         on_off_hook=lambda: hook_events.append("off_hook"),
         on_on_hook=lambda: hook_events.append("on_hook"),
     )
@@ -135,7 +132,6 @@ def test_hook_monitor_debounce_prevents_bounce(mock_gpio: MockGPIO, hook_events:
     """Test debouncing prevents spurious events from switch bounce."""
     monitor = HookMonitor(
         gpio=mock_gpio,
-        debounce_time=0.05,
         on_off_hook=lambda: hook_events.append("off_hook"),
     )
     monitor.start()
@@ -157,13 +153,12 @@ def test_hook_monitor_rapid_changes_during_debounce(
     """Test that rapid state changes during debounce are ignored."""
     monitor = HookMonitor(
         gpio=mock_gpio,
-        debounce_time=0.1,  # Longer debounce
         on_off_hook=lambda: hook_events.append("off_hook"),
         on_on_hook=lambda: hook_events.append("on_hook"),
     )
     monitor.start()
 
-    # Change state rapidly (faster than debounce time)
+    # Change state rapidly (faster than debounce time of 0.05s)
     simulate_pick_up(mock_gpio)
     time.sleep(0.02)  # Less than debounce time
     simulate_hang_up(mock_gpio)
@@ -171,7 +166,7 @@ def test_hook_monitor_rapid_changes_during_debounce(
     simulate_pick_up(mock_gpio)
 
     # Wait for debounce to complete
-    time.sleep(0.15)
+    time.sleep(0.1)
 
     # Should only register final state
     assert monitor.get_state() == HookState.OFF_HOOK
@@ -186,7 +181,6 @@ def test_hook_monitor_no_callback_if_state_unchanged(
     """Test that callbacks are not called if state doesn't actually change."""
     monitor = HookMonitor(
         gpio=mock_gpio,
-        debounce_time=0.05,
         on_off_hook=lambda: hook_events.append("off_hook"),
     )
     monitor.start()
@@ -206,25 +200,13 @@ def test_hook_monitor_no_callback_if_state_unchanged(
     monitor.stop()
 
 
-def test_hook_monitor_different_debounce_times(mock_gpio: MockGPIO) -> None:
-    """Test monitor works with different debounce times."""
-    # Very short debounce
-    monitor = HookMonitor(gpio=mock_gpio, debounce_time=0.01)
+def test_hook_monitor_debounce_timing(mock_gpio: MockGPIO) -> None:
+    """Test monitor respects debounce timing."""
+    monitor = HookMonitor(gpio=mock_gpio)
     monitor.start()
     simulate_pick_up(mock_gpio)
-    time.sleep(0.05)
-    assert monitor.get_state() == HookState.OFF_HOOK
-    monitor.stop()
-
-    # Reset
-    simulate_hang_up(mock_gpio)
-    time.sleep(0.05)
-
-    # Longer debounce
-    monitor = HookMonitor(gpio=mock_gpio, debounce_time=0.1)
-    monitor.start()
-    simulate_pick_up(mock_gpio)
-    time.sleep(0.15)
+    # Wait for debounce (DEBOUNCE_TIME is 0.05s)
+    time.sleep(0.1)
     assert monitor.get_state() == HookState.OFF_HOOK
     monitor.stop()
 
@@ -238,7 +220,6 @@ def test_hook_monitor_start_stop_multiple_times(
     """Test starting and stopping the monitor multiple times."""
     monitor = HookMonitor(
         gpio=mock_gpio,
-        debounce_time=0.05,
         on_off_hook=lambda: hook_events.append("off_hook"),
     )
 
@@ -267,7 +248,6 @@ def test_hook_monitor_no_events_when_stopped(mock_gpio: MockGPIO, hook_events: L
     """Test no events when monitor is stopped."""
     monitor = HookMonitor(
         gpio=mock_gpio,
-        debounce_time=0.05,
         on_off_hook=lambda: hook_events.append("off_hook"),
     )
     monitor.start()
@@ -284,7 +264,6 @@ def test_hook_monitor_call_session(mock_gpio: MockGPIO, hook_events: List[str]) 
     """Test a realistic call session: pick up, talk, hang up."""
     monitor = HookMonitor(
         gpio=mock_gpio,
-        debounce_time=0.05,
         on_off_hook=lambda: hook_events.append("call_started"),
         on_on_hook=lambda: hook_events.append("call_ended"),
     )

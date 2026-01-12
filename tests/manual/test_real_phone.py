@@ -94,8 +94,8 @@ class RealPhoneTestHarness:
         config.get_sip_config.return_value = self.sip_config
 
         # Create hardware components with MockGPIO
-        self.hook_monitor = HookMonitor(gpio=self.gpio, debounce_time=0.05)
-        self.dial_reader = DialReader(gpio=self.gpio, pulse_timeout=0.2)
+        self.hook_monitor = HookMonitor(gpio=self.gpio)
+        self.dial_reader = DialReader(gpio=self.gpio)
         self.ringer = Ringer(gpio=self.gpio, ring_on_duration=2.0, ring_off_duration=4.0)
 
         # Create REAL SIP client

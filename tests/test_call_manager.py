@@ -24,9 +24,9 @@ def mock_config():
     config.get.side_effect = config_get_side_effect
     config.get_sip_config.return_value = {"server": "", "username": ""}
     config.get_timing_config.return_value = {
-        "debounce_time": 0.05,
-        "pulse_timeout": 0.1,
         "inter_digit_timeout": 2.0,
+        "ring_duration": 2.0,
+        "ring_pause": 4.0,
     }
     config.get_speed_dial.return_value = None
     config.is_allowed.return_value = True

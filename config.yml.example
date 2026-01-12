@@ -1,24 +1,27 @@
-# Default configuration for Rotary Phone VoIP Controller
-# User config (config.yaml) will override these values
+# Rotary Phone VoIP Controller - Example Configuration
+# Copy this file to config.yml and customize for your setup
 
 # SIP/VoIP Settings
 sip:
-  server: ""                    # VoIP.ms server (e.g., seattle.voip.ms)
-  username: ""                  # VoIP.ms account or sub-account
-  password: ""                  # SIP password (not web password)
-  port: 5060                    # SIP port
-  stun_server: "stun.voip.ms"   # STUN server for NAT traversal
+  server: "seattle.voip.ms"       # Your VoIP provider's SIP server
+  username: "123456_myphone"      # SIP account username
+  password: "your-sip-password"   # SIP password (not web password!)
+  port: 5060                      # SIP port (default: 5060)
+  stun_server: "stun.voip.ms"     # STUN server for NAT traversal
 
 # Speed Dial Mappings
-# Short codes that map to full phone numbers
-# Example: "11": "+12065551234"  # Dad's cell
+# Map short codes to full phone numbers
+# Example:
+#   "1": "+12065551234"   # Mom's cell
+#   "2": "+12065555678"   # Dad's work
 speed_dial: {}
 
-# Allowlist - numbers that can be dialed directly
-# Use [] to block all direct dialing (speed dial only)
-# Use ["*"] to allow any number
-# Example: ["+12065551234", "+12065555678", "911"]
-allowlist: []
+# Allowlist - Numbers that can be dialed directly
+# Options:
+#   [] - Block all direct dialing (speed dial only)
+#   ["*"] - Allow any number to be dialed
+#   ["+1234567890", "911"] - Allow specific numbers
+allowlist: ["*"]
 
 # Timing Constants (in seconds)
 timing:
@@ -37,7 +40,7 @@ audio:
 
 # Database Settings
 database:
-  path: "calls.db"              # SQLite database path for call logs
+  path: "data/calls.db"              # SQLite database path for call logs
   cleanup_days: 365             # Auto-delete call logs older than this (0 = never)
 
 # Logging
@@ -51,4 +54,4 @@ logging:
 web:
   enabled: false                # Enable web admin interface
   host: "0.0.0.0"              # Host to bind (0.0.0.0 = all interfaces)
-  port: 8000                    # Port for web interface
+  port: 7474                    # Port for web interface

@@ -65,8 +65,8 @@ def phone_system(mock_gpio, test_config):
     # Note: setup() will initialize values, but we want to be explicit
 
     # Create components
-    hook_monitor = HookMonitor(gpio=mock_gpio, debounce_time=0.01)
-    dial_reader = DialReader(gpio=mock_gpio, pulse_timeout=0.2)  # Longer pulse timeout
+    hook_monitor = HookMonitor(gpio=mock_gpio)
+    dial_reader = DialReader(gpio=mock_gpio)
     ringer = Ringer(gpio=mock_gpio, ring_on_duration=0.1, ring_off_duration=0.1)
     sip_client = InMemorySIPClient(registration_delay=0.0)  # Immediate registration
 
@@ -195,7 +195,7 @@ def test_incoming_call_flow(phone_system):
 
     # Answer call
     simulate_hook_off(gpio)
-    time.sleep(0.05)
+    time.sleep(0.1)  # Wait for debounce (DEBOUNCE_TIME is 0.05s)
 
     # Should be connected, ringer stopped
     assert manager.get_state() == PhoneState.CONNECTED
@@ -203,7 +203,7 @@ def test_incoming_call_flow(phone_system):
 
     # Hang up
     simulate_hook_on(gpio)
-    time.sleep(0.05)
+    time.sleep(0.1)  # Wait for debounce
 
     # Back to idle
     assert manager.get_state() == PhoneState.IDLE
@@ -240,7 +240,7 @@ def test_allowlist_blocking(phone_system):
 
     # Hang up clears error
     simulate_hook_on(gpio)
-    time.sleep(0.05)
+    time.sleep(0.1)  # Wait for debounce (DEBOUNCE_TIME is 0.05s)
     assert manager.get_state() == PhoneState.IDLE
     assert manager.get_error_message() == ""
 

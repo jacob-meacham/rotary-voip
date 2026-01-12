@@ -229,12 +229,12 @@ uv run pytest tests/test_integration_e2e.py -v  # Just E2E
 
 ---
 
-### 3. Real SIP Provider Tests (`python -m tests.manual.test_real_sip`)
+### 3. Real SIP Provider Tests (`python -m tests.manual.test_real_phone`)
 **When to run:** Manual verification only, before production deployment
 
 **What it includes:**
 - Tests against **real** SIP provider (voip.ms)
-- Makes **actual** phone calls to TEST_DESTINATION
+- Makes **actual** phone calls
 - Tests registration, outgoing calls, answer detection
 
 **Cost:** **Uses real SIP credits and makes actual phone calls**
@@ -243,11 +243,10 @@ uv run pytest tests/test_integration_e2e.py -v  # Just E2E
 
 **Setup required:**
 - User must configure `.env.test` with voip.ms credentials
-- User must set TEST_DESTINATION to a number they control
 
 ```bash
 # DO NOT run without explicit user permission!
-python -m tests.manual.test_real_sip
+python -m tests.manual.test_real_phone
 ```
 
 ---

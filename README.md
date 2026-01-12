@@ -46,7 +46,7 @@ For complete build instructions, wiring diagrams, and bill of materials, see **[
 
 3. **Create configuration file:**
    ```bash
-   cp config.yaml.example config.yaml
+   cp config.yml.example config.yml
    ```
 
 4. **Edit configuration** with your SIP credentials and GPIO pins:
@@ -82,7 +82,7 @@ For complete build instructions, wiring diagrams, and bill of materials, see **[
 
 ```bash
 # On Raspberry Pi with real hardware
-uv run rotary-phone --config config.yaml
+uv run rotary-phone --config config.yml
 
 # For testing without hardware (mock GPIO)
 uv run rotary-phone --mock-gpio --config config.yaml
@@ -107,7 +107,7 @@ uv run rotary-phone --debug --config config.yaml
 
 ### Speed Dial
 
-Configure short codes in `config.yaml` that expand to full numbers:
+Configure short codes in `config.yml` that expand to full numbers:
 - Dial `1` to call `+15551234567` (Mom)
 - Dial `2` to call `+15557654321` (Dad)
 

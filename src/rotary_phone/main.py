@@ -58,8 +58,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--config",
         type=str,
-        default="config.yaml",
-        help="Path to configuration file (default: config.yaml)",
+        default="config.yml",
+        help="Path to configuration file (default: config.yml)",
     )
     return parser.parse_args()
 
@@ -81,9 +81,7 @@ def main() -> NoReturn:  # pylint: disable=too-many-locals,too-many-branches,too
 
     # Load configuration
     try:
-        logger.info("Loading configuration from: %s", args.config)
         config = ConfigManager(user_config_path=args.config)
-        logger.info("Configuration loaded successfully")
 
         # Log some key config info
         sip_config = config.get_sip_config()
@@ -119,16 +117,10 @@ def main() -> NoReturn:  # pylint: disable=too-many-locals,too-many-branches,too
     # Initialize hardware components
     logger.info("Initializing hardware components...")
     try:
-        hook_monitor = HookMonitor(
-            gpio=hardware,
-            debounce_time=timing.get("debounce_time", 0.05),
-        )
+        hook_monitor = HookMonitor(gpio=hardware)
         logger.info("  - HookMonitor initialized")
 
-        dial_reader = DialReader(
-            gpio=hardware,
-            pulse_timeout=timing.get("pulse_timeout", 0.15),
-        )
+        dial_reader = DialReader(gpio=hardware)
         logger.info("  - DialReader initialized")
 
         # Get optional ring sound file from hardware config
@@ -238,14 +230,16 @@ def main() -> NoReturn:  # pylint: disable=too-many-locals,too-many-branches,too
             from rotary_phone.web.app import create_app
 
             # Create FastAPI app
-            web_app = create_app(call_manager=call_manager, config_manager=config)
+            web_app = create_app(
+                call_manager=call_manager, config_manager=config, config_path=args.config
+            )
 
             # Start FastAPI in daemon thread
             def run_web_server() -> None:
                 uvicorn.run(
                     web_app,
                     host=config.get("web.host", "0.0.0.0"),
-                    port=config.get("web.port", 8000),
+                    port=config.get("web.port", 7474),
                     log_level="warning",  # Reduce uvicorn logging noise
                 )
 
@@ -255,7 +249,7 @@ def main() -> NoReturn:  # pylint: disable=too-many-locals,too-many-branches,too
             logger.info(
                 "  - Web admin interface started at http://%s:%d",
                 config.get("web.host", "0.0.0.0"),
-                config.get("web.port", 8000),
+                config.get("web.port", 7474),
             )
 
         except Exception as e:

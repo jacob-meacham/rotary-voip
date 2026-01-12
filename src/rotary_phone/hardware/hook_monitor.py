@@ -10,6 +10,9 @@ from rotary_phone.hardware.pins import HOOK
 
 logger = logging.getLogger(__name__)
 
+# Debounce time in seconds - prevents spurious state changes from mechanical switch bounce
+DEBOUNCE_TIME = 0.05
+
 
 class HookState(Enum):
     """Hook switch states."""
@@ -31,7 +34,6 @@ class HookMonitor:
     def __init__(
         self,
         gpio: GPIO,
-        debounce_time: float,
         on_off_hook: Optional[Callable[[], None]] = None,
         on_on_hook: Optional[Callable[[], None]] = None,
     ) -> None:
@@ -39,12 +41,10 @@ class HookMonitor:
 
         Args:
             gpio: GPIO interface to use
-            debounce_time: Seconds to wait for stable state before confirming change
             on_off_hook: Callback when phone goes off-hook (picked up)
             on_on_hook: Callback when phone goes on-hook (hung up)
         """
         self._gpio = gpio
-        self._debounce_time = debounce_time
         self._on_off_hook = on_off_hook
         self._on_on_hook = on_on_hook
 
@@ -54,7 +54,7 @@ class HookMonitor:
         self._lock = threading.Lock()
         self._running = False
 
-        logger.debug("HookMonitor initialized with debounce_time=%.3f", debounce_time)
+        logger.debug("HookMonitor initialized with debounce_time=%.3f", DEBOUNCE_TIME)
 
     def start(self) -> None:
         """Start monitoring the hook switch."""
@@ -142,7 +142,7 @@ class HookMonitor:
 
             # Start new debounce timer
             self._pending_state = new_state
-            self._debounce_timer = threading.Timer(self._debounce_time, self._on_debounce_complete)
+            self._debounce_timer = threading.Timer(DEBOUNCE_TIME, self._on_debounce_complete)
             self._debounce_timer.daemon = True
             self._debounce_timer.start()
 

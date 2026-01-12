@@ -44,8 +44,8 @@ class TestHarness:
         }
 
         # Create components
-        self.hook_monitor = HookMonitor(gpio=self.gpio, debounce_time=0.05)
-        self.dial_reader = DialReader(gpio=self.gpio, pulse_timeout=0.2)
+        self.hook_monitor = HookMonitor(gpio=self.gpio)
+        self.dial_reader = DialReader(gpio=self.gpio)
         self.ringer = Ringer(gpio=self.gpio, ring_on_duration=2.0, ring_off_duration=4.0)
         self.sip_client = InMemorySIPClient(registration_delay=0.0)
 

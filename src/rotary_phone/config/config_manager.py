@@ -19,23 +19,18 @@ class ConfigError(Exception):
 class ConfigManager:
     """Manages loading and accessing configuration from YAML files."""
 
-    def __init__(self, user_config_path: Optional[str] = None) -> None:
+    def __init__(self, user_config_path: str) -> None:
         """Initialize the configuration manager.
 
         Args:
-            user_config_path: Path to user config file (overrides defaults)
+            user_config_path: Path to user config file (required)
+
+        Raises:
+            ConfigError: If config file doesn't exist or is invalid
         """
         self._config: Dict[str, Any] = {}
         self._user_config_path = user_config_path
         self._load_config()
-
-    def _get_default_config_path(self) -> Path:
-        """Get the path to the default configuration file.
-
-        Returns:
-            Path to default_config.yaml
-        """
-        return Path(__file__).parent / "default_config.yaml"
 
     def _load_yaml_file(self, path: Path) -> Dict[str, Any]:
         """Load a YAML file and return its contents.
@@ -59,28 +54,6 @@ class ConfigManager:
             raise ConfigError(f"Failed to parse YAML file {path}: {e}") from e
         except OSError as e:
             raise ConfigError(f"Failed to load config file {path}: {e}") from e
-
-    def _merge_configs(self, base: Dict[str, Any], override: Dict[str, Any]) -> Dict[str, Any]:
-        """Recursively merge two configuration dictionaries.
-
-        Args:
-            base: Base configuration (defaults)
-            override: Override configuration (user settings)
-
-        Returns:
-            Merged configuration dictionary
-        """
-        result = base.copy()
-
-        for key, value in override.items():
-            if key in result and isinstance(result[key], dict) and isinstance(value, dict):
-                # Recursively merge nested dictionaries
-                result[key] = self._merge_configs(result[key], value)
-            else:
-                # Override value
-                result[key] = value
-
-        return result
 
     def _validate_config(self) -> None:
         """Validate the loaded configuration.
@@ -108,8 +81,6 @@ class ConfigManager:
             raise ConfigError("'timing' section must be a dictionary")
 
         for timing_name in [
-            "debounce_time",
-            "pulse_timeout",
             "inter_digit_timeout",
             "ring_duration",
             "ring_pause",
@@ -133,26 +104,24 @@ class ConfigManager:
                 raise ConfigError("'allowlist' must be a list")
 
     def _load_config(self) -> None:
-        """Load configuration from default and user files."""
-        # Load default config
-        default_path = self._get_default_config_path()
-        logger.debug("Loading default config from: %s", default_path)
-        default_config = self._load_yaml_file(default_path)
+        """Load configuration from user config file.
 
-        # Try to load user config if path provided
-        if self._user_config_path:
-            user_path = Path(self._user_config_path)
-            if user_path.exists():
-                logger.info("Loading user config from: %s", user_path)
-                user_config = self._load_yaml_file(user_path)
-                self._config = self._merge_configs(default_config, user_config)
-            else:
-                logger.warning("User config file not found: %s, using defaults only", user_path)
-                self._config = default_config
-        else:
-            self._config = default_config
+        Raises:
+            ConfigError: If config file doesn't exist or is invalid
+        """
+        config_path = Path(self._user_config_path)
 
-        # Validate the merged configuration
+        # Check if file exists first
+        if not config_path.exists():
+            raise ConfigError(
+                f"Configuration file not found: {config_path}\n"
+                f"Please create a config file. See config.yml.example for reference."
+            )
+
+        logger.info("Loading configuration from: %s", config_path)
+        self._config = self._load_yaml_file(config_path)
+
+        # Validate the configuration
         self._validate_config()
         logger.info("Configuration loaded and validated successfully")
 
@@ -291,7 +260,10 @@ class ConfigManager:
         Returns:
             Config dict with passwords masked
         """
-        config = self.to_dict()
+        # pylint: disable=import-outside-toplevel
+        import copy
+
+        config = copy.deepcopy(self._config)
         # Mask SIP password
         if "sip" in config and "password" in config["sip"]:
             config["sip"]["password"] = "***MASKED***"
