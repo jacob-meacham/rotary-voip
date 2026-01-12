@@ -34,7 +34,7 @@ class PhoneState(Enum):
     ERROR = "error"  # Error state (blocked number, call failed, etc.)
 
 
-class CallManager:
+class CallManager:  # pylint: disable=too-many-instance-attributes
     """Coordinates all phone components with a state machine.
 
     The CallManager is the main orchestrator that:
@@ -46,6 +46,7 @@ class CallManager:
     - Enforces the phone state machine
     """
 
+    # pylint: disable=too-many-arguments,too-many-positional-arguments
     def __init__(
         self,
         config: ConfigManager,

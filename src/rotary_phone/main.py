@@ -64,7 +64,7 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def main() -> NoReturn:
+def main() -> NoReturn:  # pylint: disable=too-many-locals,too-many-branches,too-many-statements
     """Main application entry point."""
     args = parse_args()
     setup_logging(args.debug)
