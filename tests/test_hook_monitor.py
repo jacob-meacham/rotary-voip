@@ -151,14 +151,17 @@ def test_hook_monitor_rapid_changes_during_debounce(
     mock_gpio: MockGPIO, hook_events: List[str]
 ) -> None:
     """Test that rapid state changes during debounce are ignored."""
+    # Use a longer debounce time so we can test rapid changes faster than debounce
+    debounce_time = 0.05
     monitor = HookMonitor(
         gpio=mock_gpio,
         on_off_hook=lambda: hook_events.append("off_hook"),
         on_on_hook=lambda: hook_events.append("on_hook"),
+        debounce_time=debounce_time,
     )
     monitor.start()
 
-    # Change state rapidly (faster than debounce time of 0.05s)
+    # Change state rapidly (faster than debounce time)
     simulate_pick_up(mock_gpio)
     time.sleep(0.02)  # Less than debounce time
     simulate_hang_up(mock_gpio)
@@ -166,7 +169,7 @@ def test_hook_monitor_rapid_changes_during_debounce(
     simulate_pick_up(mock_gpio)
 
     # Wait for debounce to complete
-    time.sleep(0.1)
+    time.sleep(debounce_time + 0.05)
 
     # Should only register final state
     assert monitor.get_state() == HookState.OFF_HOOK

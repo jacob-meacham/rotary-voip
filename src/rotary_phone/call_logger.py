@@ -178,15 +178,17 @@ class CallLogger:
             dialed_number: Number that was dialed
             reason: Why the call was rejected
         """
-        call_log = CallLog(
-            timestamp=datetime.utcnow(),
-            direction="outbound",
-            dialed_number=dialed_number,
-            destination=dialed_number,  # Same as dialed since it was rejected
-            status="rejected",
-            error_message=reason,
-        )
+        with self._lock:
+            call_log = CallLog(
+                timestamp=datetime.utcnow(),
+                direction="outbound",
+                dialed_number=dialed_number,
+                destination=dialed_number,  # Same as dialed since it was rejected
+                status="rejected",
+                error_message=reason,
+            )
 
+        # Save to database (outside lock to avoid blocking)
         try:
             call_id = self._db.add_call(call_log)
             logger.info("Logged rejected call to %s (id=%d): %s", dialed_number, call_id, reason)

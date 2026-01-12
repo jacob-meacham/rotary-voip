@@ -25,11 +25,13 @@ allowlist: ["*"]
 
 # Timing Constants (in seconds)
 timing:
-  debounce_time: 0.01           # GPIO debounce time (10ms)
-  pulse_timeout: 0.3            # Max time between pulses in same digit
   inter_digit_timeout: 2.0      # Time to wait for next digit before dialing
   ring_duration: 2.0            # Ring on time
   ring_pause: 4.0               # Ring off time
+  pulse_timeout: 0.3            # Time after last pulse before digit is complete
+  hook_debounce_time: 0.01      # Debounce time for hook switch (prevents bouncing)
+  sip_registration_timeout: 10.0  # How long to wait for SIP registration
+  call_attempt_timeout: 60.0    # How long to wait for outbound call to connect
 
 # Audio Settings
 audio:

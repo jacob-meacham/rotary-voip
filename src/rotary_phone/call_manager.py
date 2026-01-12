@@ -79,7 +79,9 @@ class CallManager:  # pylint: disable=too-many-instance-attributes
         self._state = PhoneState.IDLE
         self._dialed_number = ""
         self._inter_digit_timeout = config.get("timing.inter_digit_timeout", 5.0)
+        self._call_attempt_timeout = config.get("timing.call_attempt_timeout", 60.0)
         self._digit_timer: Optional[threading.Timer] = None
+        self._call_attempt_timer: Optional[threading.Timer] = None
         self._error_message = ""
         self._lock = threading.RLock()
         self._running = False
@@ -141,6 +143,9 @@ class CallManager:  # pylint: disable=too-many-instance-attributes
             if self._digit_timer:
                 self._digit_timer.cancel()
                 self._digit_timer = None
+            if self._call_attempt_timer:
+                self._call_attempt_timer.cancel()
+                self._call_attempt_timer = None
 
         # Stop components
         self._dial_reader.stop()
@@ -238,10 +243,13 @@ class CallManager:  # pylint: disable=too-many-instance-attributes
         with self._lock:
             logger.debug("On-hook event in state: %s", self._state.value)
 
-            # Cancel any pending digit timer
+            # Cancel any pending timers
             if self._digit_timer:
                 self._digit_timer.cancel()
                 self._digit_timer = None
+            if self._call_attempt_timer:
+                self._call_attempt_timer.cancel()
+                self._call_attempt_timer = None
 
             # Stop dial tone if playing
             if self._dial_tone:
@@ -363,6 +371,14 @@ class CallManager:  # pylint: disable=too-many-instance-attributes
         try:
             self._sip_client.make_call(destination)
             self._transition_to(PhoneState.CALLING)
+
+            # Start call attempt timeout timer
+            self._call_attempt_timer = threading.Timer(
+                self._call_attempt_timeout, self._on_call_attempt_timeout
+            )
+            self._call_attempt_timer.daemon = True
+            self._call_attempt_timer.start()
+            logger.debug("Call attempt timeout set for %.1f seconds", self._call_attempt_timeout)
         except Exception as e:
             logger.error("Failed to make call: %s", e)
             # Log failed call
@@ -388,15 +404,15 @@ class CallManager:  # pylint: disable=too-many-instance-attributes
             # Check allowlist for incoming calls
             if not self._config.is_allowed(caller_id):
                 logger.warning("Rejecting incoming call from %s (not in allowlist)", caller_id)
-                # Log rejected call
-                if self._call_logger:
-                    self._call_logger.on_inbound_call_started(caller_id)
-                    self._call_logger.on_call_rejected(
-                        caller_id, f"Caller {caller_id} is not in allowlist"
-                    )
-                # Reject the call
+                # Reject the call first, then log if successful
                 try:
                     self._sip_client.reject_call()
+                    # Only log rejection after successful SIP rejection
+                    if self._call_logger:
+                        self._call_logger.on_inbound_call_started(caller_id)
+                        self._call_logger.on_call_rejected(
+                            caller_id, f"Caller {caller_id} is not in allowlist"
+                        )
                 except Exception as e:
                     logger.error("Failed to reject call: %s", e)
                 return
@@ -417,6 +433,11 @@ class CallManager:  # pylint: disable=too-many-instance-attributes
         with self._lock:
             logger.info("Call answered")
 
+            # Cancel call attempt timeout since call was answered
+            if self._call_attempt_timer:
+                self._call_attempt_timer.cancel()
+                self._call_attempt_timer = None
+
             if self._state != PhoneState.CALLING:
                 logger.warning("Call answered in unexpected state: %s", self._state.value)
                 return
@@ -431,6 +452,11 @@ class CallManager:  # pylint: disable=too-many-instance-attributes
         """Handle call ending."""
         with self._lock:
             logger.info("Call ended")
+
+            # Cancel call attempt timeout if still running
+            if self._call_attempt_timer:
+                self._call_attempt_timer.cancel()
+                self._call_attempt_timer = None
 
             # Determine call status for logging
             call_status = self._determine_call_status()
@@ -476,3 +502,39 @@ class CallManager:  # pylint: disable=too-many-instance-attributes
             # Call was connected and ended normally
             return "completed"
         return "unknown"
+
+    def _on_call_attempt_timeout(self) -> None:
+        """Handle call attempt timeout - remote party never answered."""
+        with self._lock:
+            self._call_attempt_timer = None
+
+            if self._state != PhoneState.CALLING:
+                # Call already ended or was answered, ignore
+                return
+
+            logger.warning("Call attempt timed out after %.1f seconds", self._call_attempt_timeout)
+
+            # Hang up the call attempt
+            try:
+                self._sip_client.hangup()
+            except Exception as e:
+                logger.error("Failed to hangup timed out call: %s", e)
+
+            # Log as unanswered
+            if self._call_logger:
+                self._call_logger.on_call_ended(
+                    status="unanswered",
+                    error_message=f"Call attempt timed out after {self._call_attempt_timeout}s",
+                )
+
+            # Check if phone is still off-hook
+            hook_state = self._hook_monitor.get_state()
+            if hook_state == HookState.ON_HOOK:
+                self._dialed_number = ""
+                self._transition_to(PhoneState.IDLE)
+            else:
+                # Phone still off-hook, let user try again
+                self._dialed_number = ""
+                self._transition_to(PhoneState.OFF_HOOK_WAITING)
+                if self._dial_tone:
+                    self._dial_tone.start()

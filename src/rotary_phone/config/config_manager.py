@@ -55,7 +55,7 @@ class ConfigManager:
         except OSError as e:
             raise ConfigError(f"Failed to load config file {path}: {e}") from e
 
-    def _validate_config(self) -> None:
+    def _validate_config(self) -> None:  # pylint: disable=too-many-branches
         """Validate the loaded configuration.
 
         Raises:
@@ -80,11 +80,13 @@ class ConfigManager:
         if not isinstance(timing, dict):
             raise ConfigError("'timing' section must be a dictionary")
 
-        for timing_name in [
+        # Required timing values
+        required_timings = [
             "inter_digit_timeout",
             "ring_duration",
             "ring_pause",
-        ]:
+        ]
+        for timing_name in required_timings:
             if timing_name not in timing:
                 raise ConfigError(f"Missing required timing setting: {timing_name}")
             value = timing[timing_name]
@@ -92,6 +94,21 @@ class ConfigManager:
                 raise ConfigError(f"Timing '{timing_name}' must be a number")
             if value <= 0:
                 raise ConfigError(f"Timing '{timing_name}' must be positive")
+
+        # Optional timing values (validated if present)
+        optional_timings = [
+            "pulse_timeout",
+            "hook_debounce_time",
+            "sip_registration_timeout",
+            "call_attempt_timeout",
+        ]
+        for timing_name in optional_timings:
+            if timing_name in timing:
+                value = timing[timing_name]
+                if not isinstance(value, (int, float)):
+                    raise ConfigError(f"Timing '{timing_name}' must be a number")
+                if value <= 0:
+                    raise ConfigError(f"Timing '{timing_name}' must be positive")
 
         # Validate speed_dial is a dict (can be empty)
         if "speed_dial" in self._config:

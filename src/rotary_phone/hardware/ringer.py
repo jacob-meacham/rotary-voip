@@ -149,12 +149,21 @@ class Ringer:
 
             # Play sound file
             # Use timeout slightly longer than ring duration to prevent hanging
-            subprocess.run(
+            result = subprocess.run(
                 ["aplay", "-q", self._sound_file],
                 capture_output=True,
                 timeout=self._ring_on_duration + 1.0,
                 check=False,  # Don't raise on non-zero exit
             )
+
+            # Check if aplay succeeded
+            if result.returncode != 0:
+                stderr = result.stderr.decode("utf-8", errors="replace") if result.stderr else ""
+                logger.warning(
+                    "aplay failed with code %d: %s (amplifier was enabled during attempt)",
+                    result.returncode,
+                    stderr.strip() or "unknown error",
+                )
 
             # Disable amplifier
             self._gpio.output(RINGER, GPIO.LOW)

@@ -9,6 +9,9 @@ from rotary_phone.hardware.dial_reader import DialReader
 from rotary_phone.hardware.gpio_abstraction import MockGPIO
 from tests.test_harness import simulate_dial_digit, simulate_dial_number, simulate_pulse
 
+# Use a short pulse timeout for faster tests
+TEST_PULSE_TIMEOUT = 0.1
+
 
 @pytest.fixture
 def collected_digits() -> List[str]:
@@ -24,11 +27,12 @@ def test_dial_reader_single_digit_1(mock_gpio: MockGPIO, collected_digits: List[
     reader = DialReader(
         gpio=mock_gpio,
         on_digit=lambda d: collected_digits.append(d),
+        pulse_timeout=TEST_PULSE_TIMEOUT,
     )
     reader.start()
 
     simulate_dial_digit(mock_gpio, "1")
-    time.sleep(0.15)  # Wait for timeout
+    time.sleep(TEST_PULSE_TIMEOUT + 0.05)  # Wait for timeout
 
     reader.stop()
 
@@ -40,11 +44,12 @@ def test_dial_reader_single_digit_5(mock_gpio: MockGPIO, collected_digits: List[
     reader = DialReader(
         gpio=mock_gpio,
         on_digit=lambda d: collected_digits.append(d),
+        pulse_timeout=TEST_PULSE_TIMEOUT,
     )
     reader.start()
 
     simulate_dial_digit(mock_gpio, "5")
-    time.sleep(0.15)  # Wait for timeout
+    time.sleep(TEST_PULSE_TIMEOUT + 0.05)  # Wait for timeout
 
     reader.stop()
 
@@ -56,11 +61,12 @@ def test_dial_reader_single_digit_0(mock_gpio: MockGPIO, collected_digits: List[
     reader = DialReader(
         gpio=mock_gpio,
         on_digit=lambda d: collected_digits.append(d),
+        pulse_timeout=TEST_PULSE_TIMEOUT,
     )
     reader.start()
 
     simulate_dial_digit(mock_gpio, "0")
-    time.sleep(0.15)  # Wait for timeout
+    time.sleep(TEST_PULSE_TIMEOUT + 0.05)  # Wait for timeout
 
     reader.stop()
 
@@ -72,11 +78,12 @@ def test_dial_reader_phone_number(mock_gpio: MockGPIO, collected_digits: List[st
     reader = DialReader(
         gpio=mock_gpio,
         on_digit=lambda d: collected_digits.append(d),
+        pulse_timeout=TEST_PULSE_TIMEOUT,
     )
     reader.start()
 
-    simulate_dial_number(mock_gpio, "5551234", digit_gap=0.15)
-    time.sleep(0.15)  # Wait for last digit timeout
+    simulate_dial_number(mock_gpio, "5551234", digit_gap=TEST_PULSE_TIMEOUT + 0.05)
+    time.sleep(TEST_PULSE_TIMEOUT + 0.05)  # Wait for last digit timeout
 
     reader.stop()
 
@@ -88,12 +95,13 @@ def test_dial_reader_rapid_pulses(mock_gpio: MockGPIO, collected_digits: List[st
     reader = DialReader(
         gpio=mock_gpio,
         on_digit=lambda d: collected_digits.append(d),
+        pulse_timeout=TEST_PULSE_TIMEOUT,
     )
     reader.start()
 
     # Dial with very short gaps (20ms instead of 60ms)
     simulate_dial_digit(mock_gpio, "3", pulse_gap=0.02)
-    time.sleep(0.15)  # Wait for timeout
+    time.sleep(TEST_PULSE_TIMEOUT + 0.05)  # Wait for timeout
 
     reader.stop()
 
@@ -105,10 +113,11 @@ def test_dial_reader_slow_pulses(mock_gpio: MockGPIO, collected_digits: List[str
     reader = DialReader(
         gpio=mock_gpio,
         on_digit=lambda d: collected_digits.append(d),
+        pulse_timeout=0.15,  # Longer timeout for slow pulses
     )
     reader.start()
 
-    # Dial with longer gaps (100ms instead of 60ms, still within PULSE_TIMEOUT of 0.15s)
+    # Dial with longer gaps (100ms instead of 60ms, still within pulse timeout)
     simulate_dial_digit(mock_gpio, "4", pulse_gap=0.1)
     time.sleep(0.2)  # Wait for timeout
 
@@ -122,6 +131,7 @@ def test_dial_reader_partial_dial_timeout(mock_gpio: MockGPIO, collected_digits:
     reader = DialReader(
         gpio=mock_gpio,
         on_digit=lambda d: collected_digits.append(d),
+        pulse_timeout=TEST_PULSE_TIMEOUT,
     )
     reader.start()
 
@@ -130,7 +140,7 @@ def test_dial_reader_partial_dial_timeout(mock_gpio: MockGPIO, collected_digits:
     time.sleep(0.05)
     simulate_pulse(mock_gpio)
     # Wait for timeout - should detect "2"
-    time.sleep(0.15)
+    time.sleep(TEST_PULSE_TIMEOUT + 0.05)
 
     reader.stop()
 
@@ -142,10 +152,11 @@ def test_dial_reader_no_pulses(mock_gpio: MockGPIO, collected_digits: List[str])
     reader = DialReader(
         gpio=mock_gpio,
         on_digit=lambda d: collected_digits.append(d),
+        pulse_timeout=TEST_PULSE_TIMEOUT,
     )
     reader.start()
 
-    time.sleep(0.15)  # Wait with no activity
+    time.sleep(TEST_PULSE_TIMEOUT + 0.05)  # Wait with no activity
 
     reader.stop()
 
@@ -159,18 +170,19 @@ def test_dial_reader_start_stop_multiple_times(
     reader = DialReader(
         gpio=mock_gpio,
         on_digit=lambda d: collected_digits.append(d),
+        pulse_timeout=TEST_PULSE_TIMEOUT,
     )
 
     # First session
     reader.start()
     simulate_dial_digit(mock_gpio, "1")
-    time.sleep(0.15)
+    time.sleep(TEST_PULSE_TIMEOUT + 0.05)
     reader.stop()
 
     # Second session
     reader.start()
     simulate_dial_digit(mock_gpio, "2")
-    time.sleep(0.15)
+    time.sleep(TEST_PULSE_TIMEOUT + 0.05)
     reader.stop()
 
     assert collected_digits == ["1", "2"]

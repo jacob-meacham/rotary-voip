@@ -9,8 +9,8 @@ from rotary_phone.hardware.pins import DIAL_PULSE
 
 logger = logging.getLogger(__name__)
 
-# Seconds to wait after last pulse before emitting the digit
-PULSE_TIMEOUT = 0.15
+# Default seconds to wait after last pulse before emitting the digit
+DEFAULT_PULSE_TIMEOUT = 0.3
 
 
 class DialReader:
@@ -31,22 +31,25 @@ class DialReader:
         self,
         gpio: GPIO,
         on_digit: Optional[Callable[[str], None]] = None,
+        pulse_timeout: float = DEFAULT_PULSE_TIMEOUT,
     ) -> None:
         """Initialize the dial reader.
 
         Args:
             gpio: GPIO interface to use
             on_digit: Callback when a digit is detected (receives digit as string)
+            pulse_timeout: Seconds to wait after last pulse before emitting digit
         """
         self._gpio = gpio
         self._on_digit = on_digit
+        self._pulse_timeout = pulse_timeout
 
         self._pulse_count = 0
         self._timer: Optional[threading.Timer] = None
         self._lock = threading.Lock()
         self._running = False
 
-        logger.debug("DialReader initialized with pulse_timeout=%.3f", PULSE_TIMEOUT)
+        logger.debug("DialReader initialized with pulse_timeout=%.3f", self._pulse_timeout)
 
     def start(self) -> None:
         """Start monitoring for dial pulses."""
@@ -108,7 +111,7 @@ class DialReader:
                 self._timer.cancel()
 
             # Start new timer to detect end of pulse sequence
-            self._timer = threading.Timer(PULSE_TIMEOUT, self._on_timeout)
+            self._timer = threading.Timer(self._pulse_timeout, self._on_timeout)
             self._timer.daemon = True
             self._timer.start()
 

@@ -10,8 +10,8 @@ from rotary_phone.hardware.pins import HOOK
 
 logger = logging.getLogger(__name__)
 
-# Debounce time in seconds - prevents spurious state changes from mechanical switch bounce
-DEBOUNCE_TIME = 0.05
+# Default debounce time in seconds - prevents spurious state changes from mechanical switch bounce
+DEFAULT_DEBOUNCE_TIME = 0.01
 
 
 class HookState(Enum):
@@ -36,6 +36,7 @@ class HookMonitor:
         gpio: GPIO,
         on_off_hook: Optional[Callable[[], None]] = None,
         on_on_hook: Optional[Callable[[], None]] = None,
+        debounce_time: float = DEFAULT_DEBOUNCE_TIME,
     ) -> None:
         """Initialize the hook monitor.
 
@@ -43,10 +44,12 @@ class HookMonitor:
             gpio: GPIO interface to use
             on_off_hook: Callback when phone goes off-hook (picked up)
             on_on_hook: Callback when phone goes on-hook (hung up)
+            debounce_time: Debounce time in seconds to prevent switch bounce
         """
         self._gpio = gpio
         self._on_off_hook = on_off_hook
         self._on_on_hook = on_on_hook
+        self._debounce_time = debounce_time
 
         self._state = HookState.ON_HOOK  # Assume phone starts on-hook
         self._debounce_timer: Optional[threading.Timer] = None
@@ -54,7 +57,7 @@ class HookMonitor:
         self._lock = threading.Lock()
         self._running = False
 
-        logger.debug("HookMonitor initialized with debounce_time=%.3f", DEBOUNCE_TIME)
+        logger.debug("HookMonitor initialized with debounce_time=%.3f", self._debounce_time)
 
     def start(self) -> None:
         """Start monitoring the hook switch."""
@@ -142,7 +145,7 @@ class HookMonitor:
 
             # Start new debounce timer
             self._pending_state = new_state
-            self._debounce_timer = threading.Timer(DEBOUNCE_TIME, self._on_debounce_complete)
+            self._debounce_timer = threading.Timer(self._debounce_time, self._on_debounce_complete)
             self._debounce_timer.daemon = True
             self._debounce_timer.start()
 

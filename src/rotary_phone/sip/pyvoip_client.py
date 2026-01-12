@@ -20,6 +20,10 @@ from rotary_phone.sip.sip_client import CallState, SIPClient
 logger = logging.getLogger(__name__)
 
 
+# Default SIP registration timeout in seconds
+DEFAULT_REGISTRATION_TIMEOUT = 10.0
+
+
 class PyVoIPClient(SIPClient):
     """Real SIP client using pyVoIP library for VoIP calling.
 
@@ -32,6 +36,7 @@ class PyVoIPClient(SIPClient):
         on_incoming_call: Optional[Callable[[str], None]] = None,
         on_call_answered: Optional[Callable[[], None]] = None,
         on_call_ended: Optional[Callable[[], None]] = None,
+        registration_timeout: float = DEFAULT_REGISTRATION_TIMEOUT,
     ) -> None:
         """Initialize the PyVoIP SIP client.
 
@@ -39,11 +44,13 @@ class PyVoIPClient(SIPClient):
             on_incoming_call: Callback when incoming call arrives
             on_call_answered: Callback when call is answered
             on_call_ended: Callback when call ends
+            registration_timeout: Seconds to wait for SIP registration
         """
         super().__init__(on_incoming_call, on_call_answered, on_call_ended)
         self._phone: Optional[VoIPPhone] = None
         self._current_call: Optional[VoIPCall] = None
         self._lock = threading.RLock()
+        self._registration_timeout = registration_timeout
 
     def register(self, account_uri: str, username: str, password: str) -> None:
         """Register with SIP server.
@@ -120,7 +127,9 @@ class PyVoIPClient(SIPClient):
 
         # Wait for registration to complete
         # pyVoIP handles this automatically, we just check status
-        for _ in range(50):  # Wait up to 5 seconds
+        poll_interval = 0.1
+        max_iterations = int(self._registration_timeout / poll_interval)
+        for _ in range(max_iterations):
             status = self._phone.get_status()
             if status == PyVoIPPhoneStatus.REGISTERED:
                 self._set_call_state(CallState.REGISTERED)
@@ -130,10 +139,10 @@ class PyVoIPClient(SIPClient):
                 logger.error("Registration failed")
                 self._set_call_state(CallState.IDLE)
                 return
-            time.sleep(0.1)
+            time.sleep(poll_interval)
 
         # Timeout
-        logger.warning("Registration timeout")
+        logger.warning("Registration timeout after %.1f seconds", self._registration_timeout)
 
     def unregister(self) -> None:
         """Unregister from SIP server."""
