@@ -1,0 +1,41 @@
+[Unit]
+Description=Rotary Phone VoIP Controller
+Documentation=https://github.com/your-repo/rotary-voip
+After=network-online.target sound.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=root
+Group=root
+
+# Working directory where config.yaml is located
+WorkingDirectory=/opt/rotary-phone
+
+# Use the installed command from uv
+ExecStart=/opt/rotary-phone/.venv/bin/rotary-phone
+
+# Restart policy
+Restart=always
+RestartSec=5
+
+# Environment
+Environment=PYTHONUNBUFFERED=1
+
+# Logging - use journal
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=rotary-phone
+
+# Security hardening (still allowing GPIO access)
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/opt/rotary-phone
+PrivateTmp=true
+
+# GPIO access requires these
+SupplementaryGroups=gpio dialout audio
+
+[Install]
+WantedBy=multi-user.target
