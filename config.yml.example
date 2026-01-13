@@ -23,12 +23,6 @@ speed_dial: {}
 #   ["+1234567890", "911"] - Allow specific numbers
 allowlist: ["*"]
 
-# Hardware GPIO Pin Configuration (BCM numbering)
-hardware:
-  hook_pin: 17                  # GPIO pin for hook switch
-  dial_pin: 27                  # GPIO pin for rotary dial pulses
-  ringer_pin: 22                # GPIO pin for ringer control (optional)
-
 # Timing Constants (in seconds)
 timing:
   inter_digit_timeout: 2.0      # Time to wait for next digit before dialing

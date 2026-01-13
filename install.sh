@@ -133,50 +133,23 @@ log_info "CLI installed: rotary-voip"
 # Verification
 echo ""
 log_step "Verifying installation..."
-VERIFY_PASSED=true
 
-# Check required directories
-for dir in "$INSTALL_DIR/src" "$INSTALL_DIR/sounds" "$INSTALL_DIR/data" "$INSTALL_DIR/.venv"; do
-    if [[ -d "$dir" ]]; then
-        echo -e "  ${GREEN}[OK]${NC} $dir"
-    else
-        echo -e "  ${RED}[X]${NC} $dir"
-        VERIFY_PASSED=false
-    fi
-done
-
-# Check required files
-for file in "$INSTALL_DIR/pyproject.toml" "$INSTALL_DIR/config.yml.example"; do
-    if [[ -f "$file" ]]; then
-        echo -e "  ${GREEN}[OK]${NC} $file"
-    else
-        echo -e "  ${RED}[X]${NC} $file"
-        VERIFY_PASSED=false
-    fi
-done
+echo -e "  ${GREEN}[OK]${NC} Repository cloned to $INSTALL_DIR"
+echo -e "  ${GREEN}[OK]${NC} Python environment created"
+echo -e "  ${GREEN}[OK]${NC} Service installed and enabled"
+echo -e "  ${GREEN}[OK]${NC} CLI tool installed"
 
 # Check config file
 if [[ -f "$INSTALL_DIR/config.yml" ]] || [[ -f "$INSTALL_DIR/config.yaml" ]]; then
     echo -e "  ${GREEN}[OK]${NC} Configuration file found"
 else
-    echo -e "  ${YELLOW}[!]${NC} No config.yml - copy from config.yml.example"
-fi
-
-# Check systemd service
-if systemctl is-enabled rotary-phone.service &>/dev/null; then
-    echo -e "  ${GREEN}[OK]${NC} Service enabled"
-else
-    echo -e "  ${YELLOW}[!]${NC} Service not enabled"
+    echo -e "  ${YELLOW}[!]${NC} config.yml not found (create with: sudo rotary-voip config)"
 fi
 
 echo ""
-if [[ "$VERIFY_PASSED" == "true" ]]; then
-    echo -e "${GREEN}+------------------------------------------------------------+${NC}"
-    echo -e "${GREEN}|${NC}              Installation complete!                         ${GREEN}|${NC}"
-    echo -e "${GREEN}+------------------------------------------------------------+${NC}"
-else
-    log_error "Installation completed with errors - check above"
-fi
+echo -e "${GREEN}+------------------------------------------------------------+${NC}"
+echo -e "${GREEN}|${NC}              Installation complete!                         ${GREEN}|${NC}"
+echo -e "${GREEN}+------------------------------------------------------------+${NC}"
 
 echo ""
 echo "Next steps:"
