@@ -2,13 +2,6 @@
 
 This directory contains files to run the Rotary Phone VoIP Controller as a systemd service on a Raspberry Pi.
 
-## Quick Start
-
-```bash
-# On your Raspberry Pi, from this directory:
-sudo ./install.sh
-```
-
 ## Files
 
 - `rotary-phone.service` - Systemd service unit file

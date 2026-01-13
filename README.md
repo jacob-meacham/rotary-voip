@@ -25,76 +25,72 @@ Convert a vintage rotary phone into a fully functional WiFi VoIP phone
 
 For complete build instructions, wiring diagrams, and bill of materials, see **[HARDWARE.md](HARDWARE.md)**
 
-## Software Requirements
+## Installation (Raspberry Pi)
 
-- Python 3.11 or higher
-- [uv](https://github.com/astral-sh/uv) (Python package manager)
-- Access to a SIP VoIP provider (voip.ms, Twilio, etc.)
-
-## Installation
-
-1. **Clone the repository:**
-   ```bash
-   git clone <repository-url>
-   cd rotary-voip
-   ```
-
-2. **Install dependencies:**
-   ```bash
-   uv sync
-   ```
-
-3. **Create configuration file:**
-   ```bash
-   cp config.yml.example config.yml
-   ```
-
-4. **Edit configuration** with your SIP credentials and GPIO pins:
-   ```yaml
-   sip:
-     server: vancouver.voip.ms
-     port: 5060
-     username: 123456_test
-     password: your_password_here
-
-   hardware:
-     hook_pin: 17      # GPIO pin for hook switch
-     dial_pin: 27      # GPIO pin for rotary dial pulse
-     ringer_pin: 22    # GPIO pin for ringer control
-     ring_sound_file: /path/to/ring.wav  # Optional: Play audio via aplay instead of GPIO toggle
-
-   speed_dial:
-     "1": "+15551234567"      # Mom
-     "2": "+15557654321"      # Dad
-
-   allowlist:
-     - "*"  # Allow all numbers (or list specific allowed numbers)
-
-   timing:
-     inter_digit_timeout: 3.0  # Seconds to wait after last digit
-     pulse_timeout: 0.15       # Max time between pulses in a digit
-     debounce_time: 0.05       # Hook switch debounce time
-   ```
-
-## Usage
-
-### Running the Phone System
+Install directly on a fresh Raspberry Pi OS Lite:
 
 ```bash
-# On Raspberry Pi with real hardware
-uv run rotary-phone --config config.yml
-
-# For testing without hardware (mock GPIO)
-uv run rotary-phone --mock-gpio --config config.yaml
-
-# With debug logging
-uv run rotary-phone --debug --config config.yaml
+# One-liner install from GitHub
+sudo bash -c "$(curl -fsSL https://raw.githubusercontent.com/jacob-meacham/rotary-voip/main/install.sh)"
 ```
+
+Or clone and install manually:
+
+```bash
+git clone https://github.com/jacob-meacham/rotary-voip.git
+cd rotary-voip
+sudo ./install.sh
+```
+
+The installer will:
+- Install all system dependencies (Python, audio tools, etc.)
+- Set up the Python environment with [uv](https://github.com/astral-sh/uv)
+- Install as a systemd service
+- Add your user to required groups (gpio, audio, dialout)
+
+After installation:
+
+```bash
+# Edit configuration with your SIP credentials
+sudo nano /opt/rotary-phone/config.yml
+
+# Start the service
+sudo systemctl start rotary-phone
+
+# Check status
+sudo systemctl status rotary-phone
+
+# View logs
+sudo journalctl -u rotary-phone -f
+```
+
+## Configuration
+
+Edit `/opt/rotary-phone/config.yml` (or `config.yml` for development):
+
+```yaml
+sip:
+  server: vancouver.voip.ms
+  port: 5060
+  username: 123456_test
+  password: your_password_here
+
+speed_dial:
+  "1": "+15551234567"      # Mom
+  "2": "+15557654321"      # Dad
+
+allowlist:
+  - "*"  # Allow all numbers (or list specific allowed numbers)
+```
+
+See `config.yml.example` for all available options.
+
+## Usage
 
 ### Making a Call
 
 1. Pick up the phone (hook off)
-2. Wait for dial tone (indicated by REGISTERED state)
+2. Wait for dial tone
 3. Dial the number using the rotary dial
 4. Wait 3 seconds after the last digit
 5. The call will automatically be placed
@@ -111,9 +107,28 @@ Configure short codes in `config.yml` that expand to full numbers:
 - Dial `1` to call `+15551234567` (Mom)
 - Dial `2` to call `+15557654321` (Dad)
 
-## Testing
+## Development
 
-### Running Unit Tests
+### Setup
+
+```bash
+git clone https://github.com/jacob-meacham/rotary-voip.git
+cd rotary-voip
+uv sync
+cp config.yml.example config.yml
+```
+
+### Running Locally
+
+```bash
+# With mock GPIO (for development on non-Pi systems)
+uv run rotary-phone --mock-gpio --config config.yml
+
+# With debug logging
+uv run rotary-phone --debug --config config.yml
+```
+
+### Testing
 
 ```bash
 # Run all unit tests
