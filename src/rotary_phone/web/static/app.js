@@ -1797,14 +1797,14 @@ async function checkAuth() {
 
         if (!data.authenticated) {
             // Not logged in, redirect to login page
-            window.location.href = '/login.html';
+            window.location.href = '/login';
             return false;
         }
 
         return true;
     } catch (error) {
         console.error('Auth check failed:', error);
-        window.location.href = '/login.html';
+        window.location.href = '/login';
         return false;
     }
 }
@@ -1812,11 +1812,11 @@ async function checkAuth() {
 async function logout() {
     try {
         await fetch('/api/auth/logout', { method: 'POST' });
-        window.location.href = '/login.html';
+        window.location.href = '/login';
     } catch (error) {
         console.error('Logout failed:', error);
         // Redirect anyway
-        window.location.href = '/login.html';
+        window.location.href = '/login';
     }
 }
 

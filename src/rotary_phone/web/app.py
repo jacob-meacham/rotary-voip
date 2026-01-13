@@ -1289,6 +1289,15 @@ def create_app(  # pylint: disable=too-many-statements
         return JSONResponse(status_code=400, content={"detail": error_msg or "Validation error"})
 
     # -------------------------------------------------------------------------
+    # Login Page Route
+    # -------------------------------------------------------------------------
+
+    @app.get("/login")
+    async def login_page() -> FileResponse:
+        """Serve login page."""
+        return FileResponse(static_dir / "login.html")
+
+    # -------------------------------------------------------------------------
     # SPA Catch-All Route (must be last)
     # -------------------------------------------------------------------------
 
@@ -1299,11 +1308,17 @@ def create_app(  # pylint: disable=too-many-statements
         This enables client-side routing with clean URLs. Must be defined last
         so it doesn't override other routes.
         """
-        # Only serve index.html for non-API routes
-        if not full_path.startswith("api/") and not full_path.startswith("static/"):
-            return FileResponse(static_dir / "index.html")
-        # If somehow we get here for an API route, return 404
-        raise HTTPException(status_code=404, detail="Not found")
+        # Don't intercept API or static routes
+        if full_path.startswith("api/") or full_path.startswith("static/"):
+            raise HTTPException(status_code=404, detail="Not found")
+
+        # Check if file exists in static directory (e.g., login.html if accessed directly)
+        file_path = static_dir / full_path
+        if file_path.exists() and file_path.is_file():
+            return FileResponse(file_path)
+
+        # Otherwise serve index.html for SPA routing
+        return FileResponse(static_dir / "index.html")
 
     logger.info("FastAPI application created")
     return app

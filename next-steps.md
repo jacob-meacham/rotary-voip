@@ -288,12 +288,14 @@ Protect the admin interface with authentication.
 - [x] Password hashing with bcrypt (cost factor 12)
 - [x] User database model with username/password_hash
 - [x] User management CLI script (`scripts/manage_users.py`)
+- [x] Login page route at `/login` (not `/login.html`)
 
 ### Frontend Tasks
 - [x] Login page (username/password form)
 - [x] Session persistence via httponly cookies
 - [x] Auto-redirect to login when not authenticated
 - [x] Logout button in gear menu
+- [x] Fixed infinite redirect loop between login and dashboard
 
 ### User Management
 ```bash
