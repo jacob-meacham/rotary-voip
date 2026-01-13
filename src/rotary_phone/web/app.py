@@ -8,7 +8,7 @@ import logging
 from pathlib import Path
 from typing import Any, AsyncIterator, Dict, Iterator, List, Optional
 
-from fastapi import APIRouter, FastAPI, HTTPException, Query, Request, UploadFile
+from fastapi import APIRouter, FastAPI, HTTPException, Query, Request, UploadFile, WebSocket, WebSocketDisconnect
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import FileResponse, JSONResponse, PlainTextResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
@@ -29,6 +29,13 @@ from rotary_phone.web.models import (
     SpeedDialUpdate,
     TimingSettingsUpdate,
     _is_valid_speed_dial_code,
+)
+from rotary_phone.web.websocket import (
+    CallEndedEvent,
+    CallStartedEvent,
+    ConnectionManager,
+    DigitDialedEvent,
+    PhoneStateChangedEvent,
 )
 
 logger = logging.getLogger(__name__)
@@ -749,6 +756,49 @@ def create_app(  # pylint: disable=too-many-statements
     app.state.log_buffer = get_log_buffer()
     install_log_handler(level=logging.DEBUG)
 
+    # Initialize WebSocket connection manager
+    app.state.ws_manager = ConnectionManager()
+
+    # Set up CallManager event callback to broadcast via WebSocket
+    def on_call_manager_event(event_type: str, data: Dict[str, Any]) -> None:
+        """Handle CallManager events and broadcast via WebSocket."""
+        ws_manager: ConnectionManager = app.state.ws_manager
+        try:
+            # Create appropriate event object
+            if event_type == "phone_state_changed":
+                event = PhoneStateChangedEvent(
+                    old_state=data["old_state"],
+                    new_state=data["new_state"],
+                    current_number=data.get("current_number"),
+                )
+            elif event_type == "call_started":
+                event = CallStartedEvent(
+                    direction=data["direction"],
+                    number=data["number"],
+                )
+            elif event_type == "call_ended":
+                event = CallEndedEvent(
+                    direction=data["direction"],
+                    number=data["number"],
+                    duration=data["duration"],
+                    status=data["status"],
+                )
+            elif event_type == "digit_dialed":
+                event = DigitDialedEvent(
+                    digit=data["digit"],
+                    number_so_far=data["number_so_far"],
+                )
+            else:
+                logger.warning("Unknown event type from CallManager: %s", event_type)
+                return
+
+            # Broadcast to all connected WebSocket clients
+            ws_manager.broadcast_sync(event)
+        except Exception as e:
+            logger.error("Error broadcasting CallManager event: %s", e)
+
+    call_manager.set_event_callback(on_call_manager_event)
+
     # Serve static files
     static_dir = Path(__file__).parent / "static"
     if static_dir.exists():
@@ -761,6 +811,27 @@ def create_app(  # pylint: disable=too-many-statements
     app.include_router(calls_router)
     app.include_router(allowlist_router)
     app.include_router(speed_dial_router)
+
+    # -------------------------------------------------------------------------
+    # WebSocket Endpoint
+    # -------------------------------------------------------------------------
+
+    @app.websocket("/ws")
+    async def websocket_endpoint(websocket: WebSocket) -> None:
+        """WebSocket endpoint for real-time updates."""
+        ws_manager: ConnectionManager = app.state.ws_manager
+        await ws_manager.connect(websocket)
+        try:
+            # Keep connection alive and listen for messages
+            while True:
+                # We don't expect messages from client, but need to keep connection alive
+                # This will raise WebSocketDisconnect when client disconnects
+                await websocket.receive_text()
+        except WebSocketDisconnect:
+            await ws_manager.disconnect(websocket)
+        except Exception as e:
+            logger.error("WebSocket error: %s", e)
+            await ws_manager.disconnect(websocket)
 
     # -------------------------------------------------------------------------
     # Core Routes (defined inline as they're simple)

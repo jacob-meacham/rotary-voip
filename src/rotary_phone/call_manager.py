@@ -10,7 +10,7 @@ from __future__ import annotations
 import logging
 import threading
 from enum import Enum
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING, Any, Callable, Dict, Optional
 
 from rotary_phone.call_logger import CallLogger
 from rotary_phone.config.config_manager import ConfigManager
@@ -62,6 +62,7 @@ class CallManager:  # pylint: disable=too-many-instance-attributes
         dial_tone: Optional[DialTone] = None,
         call_logger: Optional[CallLogger] = None,
         audio_handler: Optional["AudioHandler"] = None,
+        event_callback: Optional[Callable[[str, Dict[str, Any]], None]] = None,
     ) -> None:
         """Initialize the call manager.
 
@@ -74,6 +75,7 @@ class CallManager:  # pylint: disable=too-many-instance-attributes
             dial_tone: Optional dial tone player
             call_logger: Optional call logger for persistence
             audio_handler: Optional audio handler for USB audio during calls
+            event_callback: Optional callback for events (event_type, data)
         """
         self._config = config
         self._hook_monitor = hook_monitor
@@ -83,6 +85,7 @@ class CallManager:  # pylint: disable=too-many-instance-attributes
         self._dial_tone = dial_tone
         self._call_logger = call_logger
         self._audio_handler = audio_handler
+        self._event_callback = event_callback
 
         self._state = PhoneState.IDLE
         self._dialed_number = ""
@@ -195,6 +198,28 @@ class CallManager:  # pylint: disable=too-many-instance-attributes
         with self._lock:
             return self._error_message
 
+    def set_event_callback(self, callback: Optional[Callable[[str, Dict[str, Any]], None]]) -> None:
+        """Set the event callback function.
+
+        Args:
+            callback: Callback function that receives (event_type, data)
+        """
+        with self._lock:
+            self._event_callback = callback
+
+    def _emit_event(self, event_type: str, data: Dict[str, Any]) -> None:
+        """Emit an event via callback if configured.
+
+        Args:
+            event_type: Type of event
+            data: Event data
+        """
+        if self._event_callback:
+            try:
+                self._event_callback(event_type, data)
+            except Exception as e:
+                logger.error("Error in event callback: %s", e)
+
     def _transition_to(self, new_state: PhoneState, error_msg: str = "") -> None:
         """Transition to a new state.
 
@@ -213,6 +238,15 @@ class CallManager:  # pylint: disable=too-many-instance-attributes
             logger.info("State transition: %s -> %s", old_state.value, new_state.value)
             if error_msg:
                 logger.warning("Error: %s", error_msg)
+
+            # Emit state changed event
+            event_data: Dict[str, Any] = {
+                "old_state": old_state.value,
+                "new_state": new_state.value,
+            }
+            if self._dialed_number:
+                event_data["current_number"] = self._dialed_number
+            self._emit_event("phone_state_changed", event_data)
 
     def _on_off_hook(self) -> None:
         """Handle phone going off-hook (picked up)."""
@@ -331,6 +365,12 @@ class CallManager:  # pylint: disable=too-many-instance-attributes
             self._dialed_number += digit
             logger.info("Dialed so far: %s", self._dialed_number)
 
+            # Emit digit dialed event
+            self._emit_event("digit_dialed", {
+                "digit": digit,
+                "number_so_far": self._dialed_number,
+            })
+
             # Cancel existing timer
             if self._digit_timer:
                 self._digit_timer.cancel()
@@ -394,6 +434,12 @@ class CallManager:  # pylint: disable=too-many-instance-attributes
             self._sip_client.make_call(destination)
             self._transition_to(PhoneState.CALLING)
 
+            # Emit call started event
+            self._emit_event("call_started", {
+                "direction": "outbound",
+                "number": destination,
+            })
+
             # Start call attempt timeout timer
             self._call_attempt_timer = threading.Timer(
                 self._call_attempt_timeout, self._on_call_attempt_timeout
@@ -450,6 +496,12 @@ class CallManager:  # pylint: disable=too-many-instance-attributes
             self._ringer.start_ringing()
             self._transition_to(PhoneState.RINGING)
 
+            # Emit call started event
+            self._emit_event("call_started", {
+                "direction": "inbound",
+                "number": caller_id,
+            })
+
     def _on_call_answered(self) -> None:
         """Handle outbound call being answered."""
         with self._lock:
@@ -499,9 +551,32 @@ class CallManager:  # pylint: disable=too-many-instance-attributes
             # Determine call status for logging
             call_status = self._determine_call_status()
 
+            # Determine call direction and number
+            if self._current_caller_id:
+                # Incoming call
+                call_direction = "inbound"
+                call_number = self._current_caller_id
+            else:
+                # Outbound call
+                call_direction = "outbound"
+                call_number = self._dialed_number
+
             # Log call ended
             if self._call_logger:
                 self._call_logger.on_call_ended(status=call_status)
+
+            # Get call duration from logger if available
+            call_duration = 0.0
+            if self._call_logger and self._call_logger.current_call:
+                call_duration = self._call_logger.current_call.get_duration()
+
+            # Emit call ended event
+            self._emit_event("call_ended", {
+                "direction": call_direction,
+                "number": call_number,
+                "duration": call_duration,
+                "status": call_status,
+            })
 
             # Stop ringer if it was ringing
             if self._state == PhoneState.RINGING:

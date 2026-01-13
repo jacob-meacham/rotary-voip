@@ -27,6 +27,13 @@ let logEntries = [];
 let logEventSource = null;
 let isLogStreaming = false;
 
+// WebSocket state
+let ws = null;
+let wsReconnectTimeout = null;
+let wsReconnectDelay = 1000; // Start with 1 second
+let wsMaxReconnectDelay = 30000; // Max 30 seconds
+let wsConnected = false;
+
 // =============================================================================
 // Navigation
 // =============================================================================
@@ -74,6 +81,217 @@ function showPage(pageName) {
 function toggleSection(name) {
     const section = document.getElementById('section-' + name);
     section.classList.toggle('open');
+}
+
+// =============================================================================
+// WebSocket Connection
+// =============================================================================
+
+function connectWebSocket() {
+    // Determine WebSocket URL (ws:// or wss:// based on current protocol)
+    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const wsUrl = `${protocol}//${window.location.host}/ws`;
+
+    console.log('Connecting to WebSocket:', wsUrl);
+    ws = new WebSocket(wsUrl);
+
+    ws.onopen = () => {
+        console.log('WebSocket connected');
+        wsConnected = true;
+        wsReconnectDelay = 1000; // Reset reconnect delay on successful connection
+        updateConnectionStatus(true);
+    };
+
+    ws.onmessage = (event) => {
+        try {
+            const message = JSON.parse(event.data);
+            handleWebSocketEvent(message);
+        } catch (e) {
+            console.error('Failed to parse WebSocket message:', e);
+        }
+    };
+
+    ws.onerror = (error) => {
+        console.error('WebSocket error:', error);
+    };
+
+    ws.onclose = () => {
+        console.log('WebSocket disconnected');
+        wsConnected = false;
+        updateConnectionStatus(false);
+
+        // Attempt to reconnect with exponential backoff
+        if (wsReconnectTimeout) {
+            clearTimeout(wsReconnectTimeout);
+        }
+        wsReconnectTimeout = setTimeout(() => {
+            console.log(`Reconnecting in ${wsReconnectDelay}ms...`);
+            connectWebSocket();
+            // Exponential backoff (double delay, up to max)
+            wsReconnectDelay = Math.min(wsReconnectDelay * 2, wsMaxReconnectDelay);
+        }, wsReconnectDelay);
+    };
+}
+
+function handleWebSocketEvent(event) {
+    console.log('WebSocket event:', event.type, event.data);
+
+    switch (event.type) {
+        case 'phone_state_changed':
+            handlePhoneStateChanged(event.data);
+            break;
+        case 'call_started':
+            handleCallStarted(event.data);
+            break;
+        case 'call_ended':
+            handleCallEnded(event.data);
+            break;
+        case 'digit_dialed':
+            handleDigitDialed(event.data);
+            break;
+        case 'config_changed':
+            handleConfigChanged(event.data);
+            break;
+        case 'call_log_updated':
+            handleCallLogUpdated(event.data);
+            break;
+        default:
+            console.warn('Unknown WebSocket event type:', event.type);
+    }
+}
+
+function handlePhoneStateChanged(data) {
+    const state = data.new_state;
+
+    // Update visual
+    const visual = document.getElementById('phone-visual');
+    if (visual) {
+        visual.className = 'phone-visual state-' + state.toLowerCase();
+    }
+
+    // Update text
+    const stateEl = document.getElementById('status-state');
+    if (stateEl) {
+        stateEl.textContent = formatState(state);
+    }
+
+    const detailEl = document.getElementById('status-detail');
+    if (detailEl) {
+        detailEl.textContent = getStateDescription(state);
+    }
+
+    // Update number
+    const numberEl = document.getElementById('status-number');
+    if (numberEl) {
+        if (data.current_number) {
+            numberEl.textContent = data.current_number;
+            numberEl.style.display = 'block';
+        } else {
+            numberEl.style.display = 'none';
+        }
+    }
+
+    // Clear error if state is not error
+    const errorEl = document.getElementById('status-error');
+    if (errorEl && state !== 'error') {
+        errorEl.style.display = 'none';
+    }
+}
+
+function handleDigitDialed(data) {
+    // Update the displayed number with the digit
+    const numberEl = document.getElementById('status-number');
+    if (numberEl) {
+        numberEl.textContent = data.number_so_far;
+        numberEl.style.display = 'block';
+    }
+}
+
+function handleCallStarted(data) {
+    console.log('Call started:', data.direction, data.number);
+    // Optionally show a toast notification for incoming calls
+    if (data.direction === 'inbound') {
+        showToast(`Incoming call from ${data.number}`, 'info');
+    }
+}
+
+function handleCallEnded(data) {
+    console.log('Call ended:', data.status, 'Duration:', data.duration);
+
+    // Reload call log stats if on dashboard
+    if (currentPage === 'dashboard') {
+        loadDashboardStats();
+        loadRecentCalls();
+    }
+
+    // Reload call log if on calls page
+    if (currentPage === 'calls') {
+        loadCallLog();
+    }
+}
+
+function handleConfigChanged(data) {
+    console.log('Config changed:', data.section);
+    // Reload relevant data based on what changed
+    if (data.section === 'speed_dial' && currentPage === 'speeddial') {
+        loadSpeedDial();
+    } else if (data.section === 'allowlist' && currentPage === 'allowlist') {
+        loadAllowlist();
+    }
+}
+
+function handleCallLogUpdated(data) {
+    console.log('Call log updated, call ID:', data.call_id);
+    // Reload call log if viewing it
+    if (currentPage === 'calls') {
+        loadCallLog();
+    }
+    // Reload dashboard stats and recent calls
+    if (currentPage === 'dashboard') {
+        loadDashboardStats();
+        loadRecentCalls();
+    }
+}
+
+function updateConnectionStatus(connected) {
+    const statusDot = document.querySelector('.connection-status .status-dot');
+    const statusText = document.querySelector('.connection-status span:last-child');
+
+    if (statusDot) {
+        statusDot.className = connected ? 'status-dot' : 'status-dot offline';
+    }
+
+    if (statusText) {
+        statusText.textContent = connected ? 'Connected' : 'Disconnected';
+    }
+}
+
+function showToast(message, type = 'info') {
+    // Create toast notification
+    const toast = document.createElement('div');
+    toast.className = `toast toast-${type}`;
+    toast.textContent = message;
+    toast.style.cssText = `
+        position: fixed;
+        top: 20px;
+        right: 20px;
+        padding: 16px 24px;
+        background: var(--bg-card);
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+        color: var(--text-primary);
+        box-shadow: var(--shadow);
+        z-index: 10000;
+        animation: slideInRight 0.3s ease;
+    `;
+
+    document.body.appendChild(toast);
+
+    // Remove after 5 seconds
+    setTimeout(() => {
+        toast.style.animation = 'slideOutRight 0.3s ease';
+        setTimeout(() => toast.remove(), 300);
+    }, 5000);
 }
 
 // =============================================================================
@@ -1156,10 +1374,14 @@ document.addEventListener('DOMContentLoaded', () => {
     loadDashboardStats();
     loadRecentCalls();
 
-    // Auto-refresh status when on dashboard
-    setInterval(() => {
-        if (currentPage === 'dashboard') {
-            loadStatus();
-        }
-    }, 2000);
+    // Connect to WebSocket for real-time updates
+    connectWebSocket();
+
+    // Note: Removed polling - using WebSocket for real-time updates
+    // Old polling code (kept for reference):
+    // setInterval(() => {
+    //     if (currentPage === 'dashboard') {
+    //         loadStatus();
+    //     }
+    // }, 2000);
 });

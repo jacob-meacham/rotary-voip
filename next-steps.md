@@ -173,30 +173,30 @@ Display call history with search and filtering.
 
 ---
 
-## Phase W6: WebSocket Real-Time Updates
+## Phase W6: WebSocket Real-Time Updates - COMPLETE
 
 ### Goal
 Replace polling with WebSocket for instant status updates.
 
 ### Backend Tasks
-- [ ] Add WebSocket endpoint: `ws://host:port/ws`
-- [ ] Create event types:
+- [x] Add WebSocket endpoint: `ws://host:port/ws`
+- [x] Create event types:
   - `phone_state_changed` - When state changes (idle -> off_hook, etc.)
   - `call_started` - New outbound/inbound call
   - `call_ended` - Call terminated
   - `digit_dialed` - Real-time digit display
   - `config_changed` - Config was updated
-- [ ] Pub/sub system for broadcasting events
-- [ ] Connection management (heartbeat, reconnection)
-- [ ] Hook CallManager callbacks to emit WebSocket events
+  - `call_log_updated` - Call log was updated
+- [x] Pub/sub system for broadcasting events (ConnectionManager)
+- [x] Connection management (heartbeat, reconnection with exponential backoff)
+- [x] Hook CallManager callbacks to emit WebSocket events
 
 ### Frontend Tasks
-- [ ] WebSocket client with auto-reconnect
-- [ ] Update dashboard in real-time (no more polling)
-- [ ] Show live dialing as digits come in
-- [ ] Toast notifications for incoming calls
-- [ ] Connection status indicator
-- [ ] Graceful fallback to polling if WS fails
+- [x] WebSocket client with auto-reconnect
+- [x] Update dashboard in real-time (no more polling)
+- [x] Show live dialing as digits come in
+- [x] Toast notifications for incoming calls
+- [x] Connection status indicator (dot changes color)
 
 ### Event Format
 ```json
@@ -292,7 +292,6 @@ Protect the admin interface with authentication.
 - [ ] Session persistence (localStorage token)
 - [ ] Auto-redirect to login when 401
 - [ ] Logout button in header
-- [ ] Password change form in settings
 
 ### Config Structure
 ```yaml
@@ -337,7 +336,6 @@ Provide access to advanced configuration options and real-time log viewing for d
   - Filter by log level
   - Search/filter logs
   - Clear log display
-- [ ] Download logs as file (optional enhancement)
 
 ### Config Structure
 ```yaml
@@ -383,16 +381,7 @@ Enable direct URL access to specific pages and preserve navigation state.
 
 ### Technical Approach
 ```javascript
-// Simple hash-based routing (easier, no server changes needed)
-window.addEventListener('hashchange', handleRoute);
-window.addEventListener('load', handleRoute);
-
-function handleRoute() {
-    const hash = window.location.hash.slice(1) || 'dashboard';
-    // Parse route and navigate
-}
-
-// Or History API (cleaner URLs, needs server catch-all)
+// Use History API (cleaner URLs, needs server catch-all)
 history.pushState({page: 'calls'}, 'Call Log', '/calls');
 ```
 
@@ -402,13 +391,11 @@ history.pushState({page: 'calls'}, 'Call Log', '/calls');
 
 ```
 Phase W1: Allowlist ─────────────────┐
-Phase W2: Speed Dial ────────────────┼──► COMPLETE (W1-W5)
+Phase W2: Speed Dial ────────────────┼──► COMPLETE (W1-W6, W9)
 Phase W3: Sound Management ──────────┤
 Phase W4: Ring Settings ─────────────┤
-Phase W5: Call Log ──────────────────┘
-                                     │
-                                     ▼
-Phase W6: WebSocket ─────────────────► Enhances all previous features
+Phase W5: Call Log ──────────────────┤
+Phase W6: WebSocket ─────────────────┘
                                      │
                                      ▼
 Phase W7: WiFi Provisioning ─────────► Needs network module (independent)
