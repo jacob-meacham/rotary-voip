@@ -104,7 +104,7 @@ apt-get install -y \
     alsa-utils \
     portaudio19-dev \
     hostapd dnsmasq \
-    curl git
+    git
 
 # Add user to required groups (for manual testing without service)
 if [[ -n "$SUDO_USER" ]]; then
@@ -154,18 +154,13 @@ if [[ -n "$CONFIG_SRC" ]]; then
     fi
 fi
 
-# Step 3: Install uv and Python dependencies
+# Step 3: Set up Python environment
 log_step "Setting up Python environment..."
 
-if ! command -v uv &> /dev/null; then
-    log_info "Installing uv package manager..."
-    curl -LsSf https://astral.sh/uv/install.sh | sh
-    export PATH="/root/.local/bin:$PATH"
-fi
-
 cd "$INSTALL_DIR"
-uv venv
-uv sync
+python3 -m venv .venv
+.venv/bin/pip install --upgrade pip
+.venv/bin/pip install .
 
 # Step 4: Install systemd service
 log_step "Installing systemd service..."
