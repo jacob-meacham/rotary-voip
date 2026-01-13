@@ -72,6 +72,7 @@ log_step "Installing system dependencies..."
 apt-get update
 apt-get install -y \
     python3 python3-pip python3-venv \
+    python3-lgpio \
     alsa-utils \
     portaudio19-dev \
     hostapd dnsmasq \
@@ -113,7 +114,8 @@ mkdir -p "$INSTALL_DIR/data"
 log_step "Setting up Python environment..."
 
 cd "$INSTALL_DIR"
-python3 -m venv .venv
+# Use --system-site-packages to access system lgpio package
+python3 -m venv --system-site-packages .venv
 .venv/bin/pip install --upgrade pip
 .venv/bin/pip install .
 

@@ -315,6 +315,7 @@ address=/#/{self.config.ip_address}
                 ["pgrep", "-f", "hostapd"],
                 capture_output=True,
                 timeout=5,
+                check=False,
             )
             return result.returncode == 0
         except subprocess.TimeoutExpired:

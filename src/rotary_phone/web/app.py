@@ -39,7 +39,7 @@ from rotary_phone.web.models import (
     TimingSettingsUpdate,
     _is_valid_speed_dial_code,
 )
-from rotary_phone.web.auth import AuthManager, require_auth
+from rotary_phone.web.auth import AuthManager
 from rotary_phone.web.websocket import (
     CallEndedEvent,
     CallStartedEvent,
@@ -737,7 +737,7 @@ async def delete_speed_dial(request: Request, code: str) -> Dict[str, Any]:
 
 
 @network_router.get("/status")
-async def get_network_status(request: Request) -> Dict[str, Any]:
+async def get_network_status(_request: Request) -> Dict[str, Any]:
     """Get current network connection status."""
     try:
         # Import here to avoid issues if not on Linux
@@ -769,7 +769,7 @@ async def get_network_status(request: Request) -> Dict[str, Any]:
 
 
 @network_router.get("/scan")
-async def scan_networks(request: Request) -> Dict[str, Any]:
+async def scan_networks(_request: Request) -> Dict[str, Any]:
     """Scan for available WiFi networks."""
     try:
         from rotary_phone.network import WiFiManager  # pylint: disable=import-outside-toplevel
@@ -839,7 +839,7 @@ async def connect_network(request: Request) -> Dict[str, Any]:
 
 
 @network_router.post("/disconnect")
-async def disconnect_network(request: Request) -> Dict[str, Any]:
+async def disconnect_network(_request: Request) -> Dict[str, Any]:
     """Disconnect from current WiFi network."""
     try:
         from rotary_phone.network import WiFiManager  # pylint: disable=import-outside-toplevel
@@ -880,10 +880,8 @@ async def get_ap_status(request: Request) -> Dict[str, Any]:
 async def start_ap(request: Request) -> Dict[str, Any]:
     """Start Access Point mode."""
     try:
-        from rotary_phone.network import (
-            AccessPoint,
-            APConfig,
-        )  # pylint: disable=import-outside-toplevel
+        # pylint: disable=import-outside-toplevel
+        from rotary_phone.network import AccessPoint, APConfig
 
         config_manager: ConfigManager = request.app.state.config_manager
 
@@ -1016,7 +1014,7 @@ async def auth_status(request: Request) -> Dict[str, Any]:
 # =============================================================================
 
 
-def create_app(  # pylint: disable=too-many-statements
+def create_app(  # pylint: disable=too-many-statements,too-many-locals
     call_manager: CallManager,
     config_manager: ConfigManager,
     config_path: str,

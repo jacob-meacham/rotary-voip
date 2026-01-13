@@ -165,7 +165,7 @@ class WiFiManager:
             logger.error("Unexpected error during WiFi scan: %s", e)
             raise RuntimeError(f"WiFi scan error: {e}") from e
 
-    def get_status(self) -> ConnectionStatus:
+    def get_status(self) -> ConnectionStatus:  # pylint: disable=too-many-branches
         """Get current WiFi connection status.
 
         Returns:
@@ -222,7 +222,7 @@ class WiFiManager:
                     key, value = line.split(":", 1)
                     if key == "802-11-WIRELESS.SSID":
                         ssid = value.strip()
-                    elif key == "IP4.ADDRESS[1]" or key == "IP4.ADDRESS":
+                    elif key in ("IP4.ADDRESS[1]", "IP4.ADDRESS"):
                         # Extract IP from "192.168.1.100/24" format
                         ip_match = re.match(r"([0-9.]+)/\d+", value)
                         if ip_match:

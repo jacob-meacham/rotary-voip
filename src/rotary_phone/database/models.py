@@ -133,7 +133,8 @@ class User:
         """Convert to dictionary for JSON serialization.
 
         Args:
-            include_password_hash: Whether to include the password hash (should be False for API responses)
+            include_password_hash: Whether to include the password hash
+                (should be False for API responses)
 
         Returns:
             Dictionary with user fields
