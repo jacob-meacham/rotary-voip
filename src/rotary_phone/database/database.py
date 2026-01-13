@@ -7,7 +7,7 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any, Dict, Generator, List, Optional
 
-from rotary_phone.database.models import CallLog
+from rotary_phone.database.models import CallLog, User
 
 logger = logging.getLogger(__name__)
 
@@ -79,6 +79,20 @@ class Database:
             conn.execute(
                 "CREATE INDEX IF NOT EXISTS idx_call_logs_direction ON call_logs(direction)"
             )
+
+            # Create users table for authentication
+            conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS users (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    username TEXT NOT NULL UNIQUE,
+                    password_hash TEXT NOT NULL,
+                    created_at TEXT NOT NULL
+                )
+            """
+            )
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_users_username ON users(username)")
+
             conn.commit()
             logger.info("Database initialized at %s", self._db_path)
 
@@ -335,3 +349,100 @@ class Database:
             if deleted:
                 logger.debug("Deleted call log with id=%d", call_id)
             return deleted
+
+    # User management methods for authentication
+
+    def add_user(self, user: User) -> int:
+        """Insert a user record.
+
+        Args:
+            user: User to insert (id field is ignored)
+
+        Returns:
+            ID of the inserted record
+
+        Raises:
+            sqlite3.IntegrityError: If username already exists
+        """
+        with self._connection() as conn:
+            cursor = conn.execute(
+                """
+                INSERT INTO users (username, password_hash, created_at)
+                VALUES (?, ?, ?)
+            """,
+                (user.username, user.password_hash, user.created_at.isoformat()),
+            )
+            conn.commit()
+            user_id = cursor.lastrowid or 0
+            logger.info("Added user with id=%d, username=%s", user_id, user.username)
+            return user_id
+
+    def get_user(self, user_id: int) -> Optional[User]:
+        """Get a single user by ID.
+
+        Args:
+            user_id: User record ID
+
+        Returns:
+            User if found, None otherwise
+        """
+        with self._connection() as conn:
+            cursor = conn.execute("SELECT * FROM users WHERE id = ?", (user_id,))
+            row = cursor.fetchone()
+            if row:
+                return User.from_row(row)
+            return None
+
+    def get_user_by_username(self, username: str) -> Optional[User]:
+        """Get a single user by username.
+
+        Args:
+            username: Username to lookup
+
+        Returns:
+            User if found, None otherwise
+        """
+        with self._connection() as conn:
+            cursor = conn.execute("SELECT * FROM users WHERE username = ?", (username,))
+            row = cursor.fetchone()
+            if row:
+                return User.from_row(row)
+            return None
+
+    def list_users(self) -> List[User]:
+        """Get all users.
+
+        Returns:
+            List of all users
+        """
+        with self._connection() as conn:
+            cursor = conn.execute("SELECT * FROM users ORDER BY created_at ASC")
+            return [User.from_row(row) for row in cursor.fetchall()]
+
+    def delete_user(self, username: str) -> bool:
+        """Delete a user by username.
+
+        Args:
+            username: Username of the user to delete
+
+        Returns:
+            True if a user was deleted, False if not found
+        """
+        with self._connection() as conn:
+            cursor = conn.execute("DELETE FROM users WHERE username = ?", (username,))
+            conn.commit()
+            deleted = cursor.rowcount > 0
+            if deleted:
+                logger.info("Deleted user: %s", username)
+            return deleted
+
+    def count_users(self) -> int:
+        """Get total number of users.
+
+        Returns:
+            Total count of users
+        """
+        with self._connection() as conn:
+            cursor = conn.execute("SELECT COUNT(*) as count FROM users")
+            result = cursor.fetchone()
+            return int(result["count"]) if result else 0

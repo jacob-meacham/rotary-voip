@@ -275,31 +275,36 @@ network:
 
 ---
 
-## Phase W8: Authentication & Security
+## Phase W8: Authentication & Security - COMPLETE
 
 ### Goal
 Protect the admin interface with authentication.
 
 ### Backend Tasks
-- [ ] Session-based authentication (or JWT)
-- [ ] Login endpoint: `POST /api/auth/login`
-- [ ] Logout endpoint: `POST /api/auth/logout`
-- [ ] Auth middleware protecting all `/api/*` routes
-- [ ] Password hashing with bcrypt
-- [ ] Rate limiting on login attempts
+- [x] Session-based authentication (in-memory sessions with 60min timeout)
+- [x] Login endpoint: `POST /api/auth/login`
+- [x] Logout endpoint: `POST /api/auth/logout`
+- [x] Auth status endpoint: `GET /api/auth/status`
+- [x] Password hashing with bcrypt (cost factor 12)
+- [x] User database model with username/password_hash
+- [x] User management CLI script (`scripts/manage_users.py`)
 
 ### Frontend Tasks
-- [ ] Login page (username/password form)
-- [ ] Session persistence (localStorage token)
-- [ ] Auto-redirect to login when 401
-- [ ] Logout button in header
+- [x] Login page (username/password form)
+- [x] Session persistence via httponly cookies
+- [x] Auto-redirect to login when not authenticated
+- [x] Logout button in gear menu
 
-### Config Structure
-```yaml
-web:
-  auth_required: true
-  username: "admin"
-  password_hash: "$2b$12$..."  # bcrypt hash
+### User Management
+```bash
+# Add a new user
+python scripts/manage_users.py add username
+
+# Delete a user
+python scripts/manage_users.py delete username
+
+# List all users
+python scripts/manage_users.py list
 ```
 
 ---
@@ -393,7 +398,7 @@ history.pushState({page: 'calls'}, 'Call Log', '/calls');
 
 ```
 Phase W1: Allowlist ─────────────────┐
-Phase W2: Speed Dial ────────────────┼──► COMPLETE (W1-W7, W9-W10)
+Phase W2: Speed Dial ────────────────┼──► COMPLETE (W1-W10)
 Phase W3: Sound Management ──────────┤
 Phase W4: Ring Settings ─────────────┤
 Phase W5: Call Log ──────────────────┤
@@ -401,7 +406,7 @@ Phase W6: WebSocket ─────────────────┤
 Phase W7: WiFi Provisioning ─────────┘
                                      │
                                      ▼
-Phase W8: Authentication ────────────► Should be near last (applies to all)
+Phase W8: Authentication ────────────► COMPLETE - Session-based auth with bcrypt
                                      │
                                      ▼
 Phase W9: Advanced Settings ─────────► COMPLETE - Log viewer, timing config

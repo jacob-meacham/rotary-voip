@@ -39,6 +39,7 @@ from rotary_phone.web.models import (
     TimingSettingsUpdate,
     _is_valid_speed_dial_code,
 )
+from rotary_phone.web.auth import AuthManager, require_auth
 from rotary_phone.web.websocket import (
     CallEndedEvent,
     CallStartedEvent,
@@ -61,6 +62,7 @@ calls_router = APIRouter(prefix="/api/calls", tags=["calls"])
 allowlist_router = APIRouter(prefix="/api/allowlist", tags=["allowlist"])
 speed_dial_router = APIRouter(prefix="/api/speed-dial", tags=["speed-dial"])
 network_router = APIRouter(prefix="/api/network", tags=["network"])
+auth_router = APIRouter(prefix="/api/auth", tags=["auth"])
 
 
 # =============================================================================
@@ -926,6 +928,90 @@ async def stop_ap(request: Request) -> Dict[str, Any]:
 
 
 # =============================================================================
+# Authentication Router
+# =============================================================================
+
+
+@auth_router.post("/login")
+async def login(request: Request) -> Dict[str, Any]:
+    """Login and create session.
+
+    Request body:
+        {
+            "username": "admin",
+            "password": "password"
+        }
+
+    Returns:
+        Success message with session cookie set
+    """
+    auth_manager: AuthManager = request.app.state.auth_manager
+
+    try:
+        body = await request.json()
+        username = body.get("username")
+        password = body.get("password")
+
+        if not username or not password:
+            raise HTTPException(status_code=400, detail="Username and password required")
+
+        # Authenticate
+        session_id = auth_manager.login(username, password)
+        if not session_id:
+            raise HTTPException(status_code=401, detail="Invalid username or password")
+
+        # Return success with session cookie
+        response = JSONResponse(content={"success": True, "message": "Logged in successfully"})
+        response.set_cookie(
+            key="session_id",
+            value=session_id,
+            httponly=True,
+            max_age=3600,  # 1 hour
+            samesite="lax",
+        )
+        return response
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error("Login error: %s", e)
+        raise HTTPException(status_code=500, detail="Internal server error") from e
+
+
+@auth_router.post("/logout")
+async def logout(request: Request) -> Dict[str, Any]:
+    """Logout and destroy session."""
+    auth_manager: AuthManager = request.app.state.auth_manager
+    session_id = request.cookies.get("session_id")
+
+    if session_id:
+        auth_manager.logout(session_id)
+
+    response = JSONResponse(content={"success": True, "message": "Logged out successfully"})
+    response.delete_cookie("session_id")
+    return response
+
+
+@auth_router.get("/status")
+async def auth_status(request: Request) -> Dict[str, Any]:
+    """Check authentication status.
+
+    Returns:
+        {
+            "authenticated": true/false,
+            "user": {...} (if authenticated)
+        }
+    """
+    auth_manager: AuthManager = request.app.state.auth_manager
+    session_id = request.cookies.get("session_id")
+
+    user = auth_manager.get_current_user(session_id)
+    if user:
+        return {"authenticated": True, "user": user.to_dict()}
+    return {"authenticated": False}
+
+
+# =============================================================================
 # App Factory
 # =============================================================================
 
@@ -965,6 +1051,14 @@ def create_app(  # pylint: disable=too-many-statements
 
     # Initialize WebSocket connection manager
     app.state.ws_manager = ConnectionManager()
+
+    # Initialize authentication manager
+    if database:
+        database.init_db()  # Ensure users table exists
+        app.state.auth_manager = AuthManager(database, session_timeout_minutes=60)
+        logger.info("Authentication enabled with %d users", database.count_users())
+    else:
+        logger.warning("No database provided - authentication will be disabled")
 
     # Set up CallManager event callback to broadcast via WebSocket
     def on_call_manager_event(event_type: str, data: Dict[str, Any]) -> None:
@@ -1013,12 +1107,14 @@ def create_app(  # pylint: disable=too-many-statements
         app.mount("/static", StaticFiles(directory=str(static_dir)), name="static")
 
     # Include routers
+    app.include_router(auth_router)  # Auth router (no protection needed)
     app.include_router(sounds_router)
     app.include_router(settings_router)
     app.include_router(logs_router)
     app.include_router(calls_router)
     app.include_router(allowlist_router)
     app.include_router(speed_dial_router)
+    app.include_router(network_router)
 
     # -------------------------------------------------------------------------
     # WebSocket Endpoint

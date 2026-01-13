@@ -94,3 +94,55 @@ class CallLog:  # pylint: disable=too-many-instance-attributes
             "ended_at": format_datetime(self.ended_at),
             "error_message": self.error_message,
         }
+
+
+@dataclass
+class User:
+    """Represents a user account for web admin authentication.
+
+    Attributes:
+        id: Database primary key (None for new records)
+        username: Unique username
+        password_hash: Bcrypt hashed password
+        created_at: When the account was created
+    """
+
+    username: str
+    password_hash: str
+    created_at: datetime
+    id: Optional[int] = None
+
+    @classmethod
+    def from_row(cls, row: Any) -> "User":
+        """Create User from a sqlite3.Row or similar mapping.
+
+        Args:
+            row: Database row with column access by name
+
+        Returns:
+            User instance
+        """
+        return cls(
+            id=row["id"],
+            username=row["username"],
+            password_hash=row["password_hash"],
+            created_at=datetime.fromisoformat(row["created_at"]),
+        )
+
+    def to_dict(self, include_password_hash: bool = False) -> Dict[str, Any]:
+        """Convert to dictionary for JSON serialization.
+
+        Args:
+            include_password_hash: Whether to include the password hash (should be False for API responses)
+
+        Returns:
+            Dictionary with user fields
+        """
+        result = {
+            "id": self.id,
+            "username": self.username,
+            "created_at": self.created_at.isoformat(),
+        }
+        if include_password_hash:
+            result["password_hash"] = self.password_hash
+        return result

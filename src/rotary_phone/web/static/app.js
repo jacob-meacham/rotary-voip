@@ -1787,10 +1787,50 @@ async function changeLogLevel() {
 }
 
 // =============================================================================
+// Authentication
+// =============================================================================
+
+async function checkAuth() {
+    try {
+        const response = await fetch('/api/auth/status');
+        const data = await response.json();
+
+        if (!data.authenticated) {
+            // Not logged in, redirect to login page
+            window.location.href = '/login.html';
+            return false;
+        }
+
+        return true;
+    } catch (error) {
+        console.error('Auth check failed:', error);
+        window.location.href = '/login.html';
+        return false;
+    }
+}
+
+async function logout() {
+    try {
+        await fetch('/api/auth/logout', { method: 'POST' });
+        window.location.href = '/login.html';
+    } catch (error) {
+        console.error('Logout failed:', error);
+        // Redirect anyway
+        window.location.href = '/login.html';
+    }
+}
+
+// =============================================================================
 // Initialization
 // =============================================================================
 
-document.addEventListener('DOMContentLoaded', () => {
+document.addEventListener('DOMContentLoaded', async () => {
+    // Check authentication first
+    const isAuthenticated = await checkAuth();
+    if (!isAuthenticated) {
+        return; // Will redirect to login
+    }
+
     // Handle initial route from URL
     const initialPath = window.location.pathname;
     navigateTo(initialPath, false); // Don't push state on initial load

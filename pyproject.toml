@@ -13,6 +13,7 @@ dependencies = [
     "websockets>=12.0",
     "psutil>=5.9.0",
     "pyaudio>=0.2.13",
+    "bcrypt>=5.0.0",
 ]
 
 [project.optional-dependencies]
