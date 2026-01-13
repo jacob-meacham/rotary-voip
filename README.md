@@ -44,24 +44,29 @@ sudo ./install.sh
 
 The installer will:
 - Install all system dependencies (Python, audio tools, etc.)
-- Set up the Python environment with [uv](https://github.com/astral-sh/uv)
+- Clone the repository to `/opt/rotary-phone`
+- Set up Python virtual environment and dependencies
 - Install as a systemd service
+- Install the `rotary-voip` CLI tool
 - Add your user to required groups (gpio, audio, dialout)
 
 After installation:
 
 ```bash
 # Edit configuration with your SIP credentials
-sudo nano /opt/rotary-phone/config.yml
+sudo rotary-voip config
 
 # Start the service
-sudo systemctl start rotary-phone
-
-# Check status
-sudo systemctl status rotary-phone
+sudo rotary-voip start
 
 # View logs
-sudo journalctl -u rotary-phone -f
+sudo rotary-voip logs
+```
+
+To update to the latest version:
+
+```bash
+sudo rotary-voip update
 ```
 
 ## Configuration

@@ -1,0 +1,180 @@
+#!/bin/bash
+#
+# rotary-voip - CLI tool for managing the Rotary Phone VoIP Controller
+#
+# Usage:
+#   rotary-voip <command> [args]
+#
+# Commands:
+#   update         Pull latest code and reinstall
+#   status         Show service status
+#   logs           Follow service logs
+#   restart        Restart the service
+#   stop           Stop the service
+#   start          Start the service
+#   manage-users   Manage web admin users
+#   config         Edit configuration file
+#   help           Show this help message
+#
+
+set -e
+
+INSTALL_DIR="/opt/rotary-phone"
+SERVICE_NAME="rotary-phone"
+
+# Colors
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
+NC='\033[0m'
+
+# Check if install directory exists
+if [[ ! -d "$INSTALL_DIR" ]]; then
+    echo -e "${RED}Error:${NC} Rotary phone not installed at $INSTALL_DIR"
+    echo "Run the installer first:"
+    echo "  sudo bash -c \"\$(curl -fsSL https://raw.githubusercontent.com/jacob-meacham/rotary-voip/main/install.sh)\""
+    exit 1
+fi
+
+cmd_update() {
+    echo -e "${BLUE}==>${NC} Updating rotary-voip..."
+
+    cd "$INSTALL_DIR"
+
+    # Pull latest
+    echo -e "${GREEN}[INFO]${NC} Pulling latest changes..."
+    git pull
+
+    # Reinstall Python package
+    echo -e "${GREEN}[INFO]${NC} Installing dependencies..."
+    .venv/bin/pip install --quiet .
+
+    # Reinstall service file in case it changed
+    if [[ -f "$INSTALL_DIR/systemd/rotary-phone.service" ]]; then
+        cp "$INSTALL_DIR/systemd/rotary-phone.service" "/etc/systemd/system/$SERVICE_NAME.service"
+        systemctl daemon-reload
+    fi
+
+    # Restart if running
+    if systemctl is-active --quiet "$SERVICE_NAME"; then
+        echo -e "${GREEN}[INFO]${NC} Restarting service..."
+        systemctl restart "$SERVICE_NAME"
+    fi
+
+    echo -e "${GREEN}[INFO]${NC} Update complete!"
+}
+
+cmd_status() {
+    systemctl status "$SERVICE_NAME" --no-pager || true
+}
+
+cmd_logs() {
+    journalctl -u "$SERVICE_NAME" -f
+}
+
+cmd_restart() {
+    echo -e "${GREEN}[INFO]${NC} Restarting $SERVICE_NAME..."
+    systemctl restart "$SERVICE_NAME"
+    systemctl status "$SERVICE_NAME" --no-pager || true
+}
+
+cmd_stop() {
+    echo -e "${GREEN}[INFO]${NC} Stopping $SERVICE_NAME..."
+    systemctl stop "$SERVICE_NAME"
+}
+
+cmd_start() {
+    echo -e "${GREEN}[INFO]${NC} Starting $SERVICE_NAME..."
+    systemctl start "$SERVICE_NAME"
+    systemctl status "$SERVICE_NAME" --no-pager || true
+}
+
+cmd_manage_users() {
+    cd "$INSTALL_DIR"
+    .venv/bin/python scripts/manage_users.py --db "$INSTALL_DIR/data/rotary_phone.db" "$@"
+}
+
+cmd_config() {
+    local config_file=""
+    if [[ -f "$INSTALL_DIR/config.yml" ]]; then
+        config_file="$INSTALL_DIR/config.yml"
+    elif [[ -f "$INSTALL_DIR/config.yaml" ]]; then
+        config_file="$INSTALL_DIR/config.yaml"
+    else
+        # Create from example
+        if [[ -f "$INSTALL_DIR/config.yml.example" ]]; then
+            cp "$INSTALL_DIR/config.yml.example" "$INSTALL_DIR/config.yml"
+            config_file="$INSTALL_DIR/config.yml"
+            echo -e "${GREEN}[INFO]${NC} Created config.yml from example"
+        else
+            echo -e "${RED}Error:${NC} No config file found"
+            exit 1
+        fi
+    fi
+
+    ${EDITOR:-nano} "$config_file"
+}
+
+cmd_help() {
+    echo "rotary-voip - CLI tool for managing the Rotary Phone VoIP Controller"
+    echo ""
+    echo "Usage:"
+    echo "  rotary-voip <command> [args]"
+    echo ""
+    echo "Commands:"
+    echo "  update         Pull latest code and reinstall"
+    echo "  status         Show service status"
+    echo "  logs           Follow service logs"
+    echo "  restart        Restart the service"
+    echo "  stop           Stop the service"
+    echo "  start          Start the service"
+    echo "  manage-users   Manage web admin users"
+    echo "  config         Edit configuration file"
+    echo "  help           Show this help message"
+    echo ""
+    echo "Examples:"
+    echo "  sudo rotary-voip update"
+    echo "  sudo rotary-voip logs"
+    echo "  sudo rotary-voip manage-users add admin"
+    echo "  sudo rotary-voip config"
+}
+
+# Main
+case "${1:-}" in
+    update)
+        shift
+        cmd_update "$@"
+        ;;
+    status)
+        cmd_status
+        ;;
+    logs)
+        cmd_logs
+        ;;
+    restart)
+        cmd_restart
+        ;;
+    stop)
+        cmd_stop
+        ;;
+    start)
+        cmd_start
+        ;;
+    manage-users|manage_users)
+        shift
+        cmd_manage_users "$@"
+        ;;
+    config)
+        cmd_config
+        ;;
+    help|--help|-h|"")
+        cmd_help
+        ;;
+    *)
+        echo -e "${RED}Error:${NC} Unknown command: $1"
+        echo ""
+        cmd_help
+        exit 1
+        ;;
+esac

@@ -10,6 +10,9 @@
 #   cd rotary-voip
 #   sudo ./install.sh
 #
+# To update after installation:
+#   cd /opt/rotary-phone && sudo git pull && sudo .venv/bin/pip install .
+#
 
 set -e
 
@@ -59,41 +62,9 @@ if [[ ! -f /proc/device-tree/model ]] || ! grep -qi "raspberry" /proc/device-tre
 fi
 
 echo ""
-echo -e "${GREEN}╔════════════════════════════════════════════════════════════╗${NC}"
-echo -e "${GREEN}║${NC}     Rotary Phone VoIP Controller - Installation Script     ${GREEN}║${NC}"
-echo -e "${GREEN}╚════════════════════════════════════════════════════════════╝${NC}"
-echo ""
-
-# Determine if we're running from within the repo or via curl
-PROJECT_DIR=""
-TEMP_CLONE=""
-
-if [[ -f "$(dirname "${BASH_SOURCE[0]}")/pyproject.toml" ]]; then
-    # Running from within the repo
-    PROJECT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-    log_info "Running from local repository: $PROJECT_DIR"
-elif [[ -f "./pyproject.toml" ]]; then
-    # Running from repo root
-    PROJECT_DIR="$(pwd)"
-    log_info "Running from local repository: $PROJECT_DIR"
-else
-    # Running via curl - need to clone the repo first
-    log_step "Cloning repository from GitHub..."
-
-    # Install git if not present
-    if ! command -v git &> /dev/null; then
-        log_info "Installing git..."
-        apt-get update -qq
-        apt-get install -y -qq git
-    fi
-
-    TEMP_CLONE=$(mktemp -d)
-    git clone --depth 1 "$REPO_URL" "$TEMP_CLONE"
-    PROJECT_DIR="$TEMP_CLONE"
-    log_info "Cloned to temporary directory: $PROJECT_DIR"
-fi
-
-log_info "Install directory: $INSTALL_DIR"
+echo -e "${GREEN}+------------------------------------------------------------+${NC}"
+echo -e "${GREEN}|${NC}     Rotary Phone VoIP Controller - Installation Script     ${GREEN}|${NC}"
+echo -e "${GREEN}+------------------------------------------------------------+${NC}"
 echo ""
 
 # Step 1: Install system dependencies
@@ -112,47 +83,31 @@ if [[ -n "$SUDO_USER" ]]; then
     usermod -a -G gpio,audio,dialout "$SUDO_USER" 2>/dev/null || true
 fi
 
-# Step 2: Create installation directory and copy files
+# Step 2: Set up installation directory
 log_step "Setting up installation directory..."
-mkdir -p "$INSTALL_DIR"
 
-log_info "Copying project files..."
-cp -r "$PROJECT_DIR/src" "$INSTALL_DIR/"
-cp "$PROJECT_DIR/pyproject.toml" "$INSTALL_DIR/"
-cp "$PROJECT_DIR/uv.lock" "$INSTALL_DIR/" 2>/dev/null || true
-
-# Copy sounds directory
-if [[ -d "$PROJECT_DIR/sounds" ]]; then
-    cp -r "$PROJECT_DIR/sounds" "$INSTALL_DIR/"
-    log_info "Copied sounds/ to $INSTALL_DIR"
-fi
-
-# Create data directory for database
-mkdir -p "$INSTALL_DIR/data"
-log_info "Created data/ directory"
-
-# Copy example config (always update it)
-if [[ -f "$PROJECT_DIR/config.yml.example" ]]; then
-    cp "$PROJECT_DIR/config.yml.example" "$INSTALL_DIR/"
-    log_info "Copied config.yml.example to $INSTALL_DIR"
-fi
-
-# Copy config file if it exists (don't overwrite existing config)
-CONFIG_SRC=""
-if [[ -f "$PROJECT_DIR/config.yaml" ]]; then
-    CONFIG_SRC="$PROJECT_DIR/config.yaml"
-elif [[ -f "$PROJECT_DIR/config.yml" ]]; then
-    CONFIG_SRC="$PROJECT_DIR/config.yml"
-fi
-
-if [[ -n "$CONFIG_SRC" ]]; then
-    if [[ ! -f "$INSTALL_DIR/config.yaml" && ! -f "$INSTALL_DIR/config.yml" ]]; then
-        cp "$CONFIG_SRC" "$INSTALL_DIR/config.yml"
-        log_info "Copied config to $INSTALL_DIR/config.yml"
-    else
-        log_warn "config.yml already exists at $INSTALL_DIR, not overwriting"
+if [[ -d "$INSTALL_DIR/.git" ]]; then
+    # Already a git repo - just pull latest
+    log_info "Existing installation found, updating..."
+    cd "$INSTALL_DIR"
+    git pull
+elif [[ -f "$(dirname "${BASH_SOURCE[0]}")/pyproject.toml" ]]; then
+    # Running from within a local repo - copy it
+    LOCAL_REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+    if [[ "$LOCAL_REPO" != "$INSTALL_DIR" ]]; then
+        log_info "Copying local repository to $INSTALL_DIR..."
+        rm -rf "$INSTALL_DIR"
+        cp -r "$LOCAL_REPO" "$INSTALL_DIR"
     fi
+else
+    # Fresh install via curl - clone the repo
+    log_info "Cloning repository to $INSTALL_DIR..."
+    rm -rf "$INSTALL_DIR"
+    git clone "$REPO_URL" "$INSTALL_DIR"
 fi
+
+# Create data directory (not tracked by git)
+mkdir -p "$INSTALL_DIR/data"
 
 # Step 3: Set up Python environment
 log_step "Setting up Python environment..."
@@ -164,17 +119,16 @@ python3 -m venv .venv
 
 # Step 4: Install systemd service
 log_step "Installing systemd service..."
-cp "$PROJECT_DIR/systemd/rotary-phone.service" "$SERVICE_FILE"
+cp "$INSTALL_DIR/systemd/rotary-phone.service" "$SERVICE_FILE"
 
 systemctl daemon-reload
 systemctl enable rotary-phone.service
 log_info "Service installed and enabled"
 
-# Cleanup temp clone if used
-if [[ -n "$TEMP_CLONE" && -d "$TEMP_CLONE" ]]; then
-    rm -rf "$TEMP_CLONE"
-    log_info "Cleaned up temporary files"
-fi
+# Step 5: Install CLI tool
+log_step "Installing CLI tool..."
+ln -sf "$INSTALL_DIR/bin/rotary-voip" /usr/local/bin/rotary-voip
+log_info "CLI installed: rotary-voip"
 
 # Verification
 echo ""
@@ -217,9 +171,9 @@ fi
 
 echo ""
 if [[ "$VERIFY_PASSED" == "true" ]]; then
-    echo -e "${GREEN}╔════════════════════════════════════════════════════════════╗${NC}"
-    echo -e "${GREEN}║${NC}              Installation complete!                         ${GREEN}║${NC}"
-    echo -e "${GREEN}╚════════════════════════════════════════════════════════════╝${NC}"
+    echo -e "${GREEN}+------------------------------------------------------------+${NC}"
+    echo -e "${GREEN}|${NC}              Installation complete!                         ${GREEN}|${NC}"
+    echo -e "${GREEN}+------------------------------------------------------------+${NC}"
 else
     log_error "Installation completed with errors - check above"
 fi
@@ -227,21 +181,20 @@ fi
 echo ""
 echo "Next steps:"
 echo "  1. Edit your configuration:"
-echo "     sudo nano $INSTALL_DIR/config.yml"
+echo "     sudo rotary-voip config"
 echo ""
 echo "  2. Start the service:"
-echo "     sudo systemctl start rotary-phone"
+echo "     sudo rotary-voip start"
 echo ""
-echo "  3. Check status:"
-echo "     sudo systemctl status rotary-phone"
+echo "  3. View logs:"
+echo "     sudo rotary-voip logs"
 echo ""
-echo "  4. View logs:"
-echo "     sudo journalctl -u rotary-phone -f"
-echo ""
-echo "Useful commands:"
-echo "  sudo systemctl stop rotary-phone     # Stop the service"
-echo "  sudo systemctl restart rotary-phone  # Restart the service"
-echo "  sudo systemctl disable rotary-phone  # Disable auto-start"
+echo "CLI commands:"
+echo "  sudo rotary-voip update        # Update to latest version"
+echo "  sudo rotary-voip status        # Show service status"
+echo "  sudo rotary-voip restart       # Restart the service"
+echo "  sudo rotary-voip manage-users  # Manage web admin users"
+echo "  rotary-voip help               # Show all commands"
 echo ""
 if [[ -n "$SUDO_USER" ]]; then
     echo -e "${YELLOW}Note:${NC} Log out and back in for group changes to take effect (gpio, audio, dialout)"
