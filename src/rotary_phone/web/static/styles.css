@@ -1240,6 +1240,186 @@ input::placeholder {
     background: rgba(239, 68, 68, 0.25);
 }
 
+/* Network Management */
+.network-status {
+    margin: 12px 0;
+}
+
+.network-status-loading {
+    padding: 16px;
+    text-align: center;
+    color: var(--text-secondary);
+    font-size: 14px;
+}
+
+.network-card {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 16px;
+}
+
+.network-card.connected {
+    border-color: var(--accent);
+}
+
+.network-card.disconnected {
+    border-color: var(--border);
+}
+
+.network-card.error {
+    border-color: var(--red);
+}
+
+.network-card-header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 12px;
+}
+
+.network-signal {
+    font-size: 20px;
+}
+
+.network-ssid {
+    font-size: 16px;
+    font-weight: 600;
+    color: var(--text-primary);
+    flex: 1;
+}
+
+.network-card-details {
+    margin-top: 12px;
+}
+
+.network-detail {
+    display: flex;
+    justify-content: space-between;
+    padding: 6px 0;
+    border-bottom: 1px solid var(--border);
+}
+
+.network-detail:last-child {
+    border-bottom: none;
+}
+
+.network-detail-label {
+    color: var(--text-secondary);
+    font-size: 13px;
+}
+
+.network-detail-value {
+    color: var(--text-primary);
+    font-size: 13px;
+    font-weight: 500;
+}
+
+.network-item {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 12px 16px;
+    margin-bottom: 8px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    transition: all 0.2s;
+}
+
+.network-item:hover {
+    background: var(--bg-hover);
+    border-color: var(--accent);
+}
+
+.network-item.connected {
+    border-color: var(--accent);
+    background: rgba(99, 102, 241, 0.05);
+}
+
+.network-item-info {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex: 1;
+}
+
+.network-name {
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--text-primary);
+}
+
+.network-item-meta {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.network-security {
+    font-size: 16px;
+    color: var(--text-muted);
+}
+
+.network-signal-text {
+    font-size: 12px;
+    color: var(--text-secondary);
+    min-width: 35px;
+    text-align: right;
+}
+
+.network-connect-form {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 20px;
+}
+
+.network-connect-form .form-group {
+    margin-bottom: 16px;
+}
+
+.network-connect-form .form-group:last-of-type {
+    margin-bottom: 20px;
+}
+
+.network-connect-form label {
+    display: block;
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--text-secondary);
+    margin-bottom: 6px;
+}
+
+.network-connect-form input[type="text"],
+.network-connect-form input[type="password"] {
+    width: 100%;
+    padding: 10px 12px;
+    background: var(--bg-input);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    color: var(--text-primary);
+    font-size: 14px;
+}
+
+.network-connect-form input[type="text"]:focus,
+.network-connect-form input[type="password"]:focus {
+    outline: none;
+    border-color: var(--accent);
+}
+
+.network-connect-form input[type="text"]:disabled {
+    background: var(--bg-hover);
+    color: var(--text-muted);
+    cursor: not-allowed;
+}
+
+.form-actions {
+    display: flex;
+    gap: 12px;
+    margin-top: 16px;
+}
+
 /* Responsive */
 @media (max-width: 768px) {
     .sidebar {
@@ -1571,5 +1751,23 @@ input::placeholder {
     .btn-sm {
         padding: 5px 10px;
         font-size: 12px;
+    }
+
+    /* Network items */
+    .network-item {
+        padding: 10px;
+    }
+
+    .network-item-info,
+    .network-item-meta {
+        gap: 6px;
+    }
+
+    .network-name {
+        font-size: 13px;
+    }
+
+    .network-signal-text {
+        font-size: 11px;
     }
 }

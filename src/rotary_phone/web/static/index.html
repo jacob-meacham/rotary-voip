@@ -428,6 +428,71 @@
                     </div>
                 </div>
 
+                <!-- Network Section -->
+                <div class="settings-section open" id="section-network">
+                    <div class="settings-header" onclick="toggleSection('network')">
+                        <div class="settings-header-left">
+                            <div class="settings-icon">&#128246;</div>
+                            <div>
+                                <div class="settings-title">Network & WiFi</div>
+                                <div class="settings-description">Manage WiFi connections and access point settings</div>
+                            </div>
+                        </div>
+                        <span class="settings-chevron">&#9660;</span>
+                    </div>
+                    <div class="settings-content">
+                        <!-- Current Connection Status -->
+                        <div class="form-label">Current Connection</div>
+                        <div class="network-status" id="network-status">
+                            <div class="network-status-loading">Loading network status...</div>
+                        </div>
+
+                        <!-- WiFi Network Scanner -->
+                        <div style="margin-top: 24px;">
+                            <div class="form-label">Available Networks</div>
+                            <button class="btn btn-secondary btn-sm" onclick="scanNetworks()" id="scan-btn">
+                                &#128268; Scan for Networks
+                            </button>
+                            <div id="network-list" style="margin-top: 12px;"></div>
+                        </div>
+
+                        <!-- WiFi Connection Form -->
+                        <div id="connect-form" style="display: none; margin-top: 24px;">
+                            <div class="form-label">Connect to Network</div>
+                            <div class="network-connect-form">
+                                <div class="form-group">
+                                    <label for="connect-ssid">Network Name (SSID)</label>
+                                    <input type="text" id="connect-ssid" placeholder="Network name" readonly>
+                                </div>
+                                <div class="form-group">
+                                    <label for="connect-password">Password</label>
+                                    <input type="password" id="connect-password" placeholder="WiFi password">
+                                </div>
+                                <div class="form-actions">
+                                    <button class="btn btn-primary" onclick="connectToNetwork()">Connect</button>
+                                    <button class="btn btn-secondary" onclick="cancelConnect()">Cancel</button>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Access Point Mode -->
+                        <div style="margin-top: 32px; padding-top: 32px; border-top: 1px solid var(--border);">
+                            <div class="form-label">Access Point Mode</div>
+                            <div id="ap-status" class="network-status">
+                                <div class="network-status-loading">Loading AP status...</div>
+                            </div>
+                            <div class="form-actions" style="margin-top: 12px;">
+                                <button class="btn btn-primary" id="ap-start-btn" onclick="startAccessPoint()" style="display: none;">
+                                    Start Access Point
+                                </button>
+                                <button class="btn btn-danger" id="ap-stop-btn" onclick="stopAccessPoint()" style="display: none;">
+                                    Stop Access Point
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
                 <!-- System Info Section -->
                 <div class="settings-section open" id="section-system">
                     <div class="settings-header" onclick="toggleSection('system')">

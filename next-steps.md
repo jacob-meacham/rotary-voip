@@ -213,7 +213,7 @@ Replace polling with WebSocket for instant status updates.
 
 ---
 
-## Phase W7: WiFi Provisioning & Captive Portal
+## Phase W7: WiFi Provisioning & Captive Portal - COMPLETE
 
 ### Goal
 Allow network configuration when phone isn't connected to WiFi.
@@ -226,37 +226,38 @@ When the phone boots and can't connect to WiFi:
 4. Phone saves credentials and reboots into client mode
 
 ### Backend Tasks - Network Module
-- [ ] Create `src/rotary_phone/network/wifi_manager.py`
+- [x] Create `src/rotary_phone/network/wifi_manager.py`
   - Scan available networks
   - Connect to network
   - Get connection status
   - Get current IP address
-- [ ] Create `src/rotary_phone/network/access_point.py`
+- [x] Create `src/rotary_phone/network/access_point.py`
   - Start/stop hostapd for AP mode
   - Configure dnsmasq for DHCP/DNS
   - Captive portal redirect
 
 ### Backend Tasks - API
-- [ ] `GET /api/network/status` - Current connection status
-- [ ] `GET /api/network/scan` - List available WiFi networks
-- [ ] `POST /api/network/connect` - Connect to a network
-- [ ] `GET /api/network/ap-status` - AP mode status
-- [ ] `POST /api/network/ap/start` - Start AP mode manually
-- [ ] `POST /api/network/ap/stop` - Stop AP mode
+- [x] `GET /api/network/status` - Current connection status
+- [x] `GET /api/network/scan` - List available WiFi networks
+- [x] `POST /api/network/connect` - Connect to a network
+- [x] `POST /api/network/disconnect` - Disconnect from current network
+- [x] `GET /api/network/ap/status` - AP mode status
+- [x] `POST /api/network/ap/start` - Start AP mode manually
+- [x] `POST /api/network/ap/stop` - Stop AP mode
 
 ### Frontend Tasks - Captive Portal
-- [ ] Minimal HTML page (works without external resources)
-- [ ] Network list with signal strength
-- [ ] Password input for protected networks
-- [ ] Connect button with progress indicator
-- [ ] Success/failure message
-- [ ] Auto-redirect to main UI after connection
+- [x] Minimal HTML page (works without external resources)
+- [x] Network list with signal strength
+- [x] Password input for protected networks
+- [x] Connect button with progress indicator
+- [x] Success/failure message
+- [x] Auto-redirect to main UI after connection
 
 ### Frontend Tasks - Settings Page
-- [ ] Network section showing current connection
-- [ ] WiFi settings (SSID, signal, IP)
-- [ ] Change network button
-- [ ] AP mode settings (SSID, password)
+- [x] Network section showing current connection
+- [x] WiFi settings (SSID, signal, IP)
+- [x] Scan and connect to networks
+- [x] AP mode controls (start/stop)
 
 ### Config Structure
 ```yaml
@@ -391,14 +392,12 @@ history.pushState({page: 'calls'}, 'Call Log', '/calls');
 
 ```
 Phase W1: Allowlist ─────────────────┐
-Phase W2: Speed Dial ────────────────┼──► COMPLETE (W1-W6, W9)
+Phase W2: Speed Dial ────────────────┼──► COMPLETE (W1-W7, W9)
 Phase W3: Sound Management ──────────┤
 Phase W4: Ring Settings ─────────────┤
 Phase W5: Call Log ──────────────────┤
-Phase W6: WebSocket ─────────────────┘
-                                     │
-                                     ▼
-Phase W7: WiFi Provisioning ─────────► Needs network module (independent)
+Phase W6: WebSocket ─────────────────┤
+Phase W7: WiFi Provisioning ─────────┘
                                      │
                                      ▼
 Phase W8: Authentication ────────────► Should be near last (applies to all)

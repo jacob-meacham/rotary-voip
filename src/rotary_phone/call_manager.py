@@ -366,10 +366,13 @@ class CallManager:  # pylint: disable=too-many-instance-attributes
             logger.info("Dialed so far: %s", self._dialed_number)
 
             # Emit digit dialed event
-            self._emit_event("digit_dialed", {
-                "digit": digit,
-                "number_so_far": self._dialed_number,
-            })
+            self._emit_event(
+                "digit_dialed",
+                {
+                    "digit": digit,
+                    "number_so_far": self._dialed_number,
+                },
+            )
 
             # Cancel existing timer
             if self._digit_timer:
@@ -435,10 +438,13 @@ class CallManager:  # pylint: disable=too-many-instance-attributes
             self._transition_to(PhoneState.CALLING)
 
             # Emit call started event
-            self._emit_event("call_started", {
-                "direction": "outbound",
-                "number": destination,
-            })
+            self._emit_event(
+                "call_started",
+                {
+                    "direction": "outbound",
+                    "number": destination,
+                },
+            )
 
             # Start call attempt timeout timer
             self._call_attempt_timer = threading.Timer(
@@ -497,10 +503,13 @@ class CallManager:  # pylint: disable=too-many-instance-attributes
             self._transition_to(PhoneState.RINGING)
 
             # Emit call started event
-            self._emit_event("call_started", {
-                "direction": "inbound",
-                "number": caller_id,
-            })
+            self._emit_event(
+                "call_started",
+                {
+                    "direction": "inbound",
+                    "number": caller_id,
+                },
+            )
 
     def _on_call_answered(self) -> None:
         """Handle outbound call being answered."""
@@ -565,18 +574,21 @@ class CallManager:  # pylint: disable=too-many-instance-attributes
             if self._call_logger:
                 self._call_logger.on_call_ended(status=call_status)
 
-            # Get call duration from logger if available
+            # Note: Call duration is tracked by the CallLogger, but we don't have
+            # access to it here since on_call_ended() clears it. The actual duration
+            # is stored in the database and can be retrieved from call logs.
             call_duration = 0.0
-            if self._call_logger and self._call_logger.current_call:
-                call_duration = self._call_logger.current_call.get_duration()
 
             # Emit call ended event
-            self._emit_event("call_ended", {
-                "direction": call_direction,
-                "number": call_number,
-                "duration": call_duration,
-                "status": call_status,
-            })
+            self._emit_event(
+                "call_ended",
+                {
+                    "direction": call_direction,
+                    "number": call_number,
+                    "duration": call_duration,
+                    "status": call_status,
+                },
+            )
 
             # Stop ringer if it was ringing
             if self._state == PhoneState.RINGING:

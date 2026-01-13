@@ -61,6 +61,8 @@ function showPage(pageName) {
     } else if (pageName === 'settings') {
         loadSoundFiles();
         loadSystemConfig();
+        loadNetworkStatus();
+        loadAPStatus();
     } else if (pageName === 'dashboard') {
         loadStatus();
         loadDashboardStats();
@@ -1110,6 +1112,339 @@ function renderConfigSection(obj, prefix) {
         }
     }
     return html;
+}
+
+// =============================================================================
+// Network Management
+// =============================================================================
+
+let networkState = {
+    currentStatus: null,
+    availableNetworks: [],
+    apStatus: null,
+    selectedSSID: null
+};
+
+async function loadNetworkStatus() {
+    const statusEl = document.getElementById('network-status');
+    try {
+        const response = await fetch('/api/network/status');
+        if (!response.ok) throw new Error('Failed to load network status');
+
+        const data = await response.json();
+        networkState.currentStatus = data.status;
+
+        if (data.status.connected) {
+            const signalBars = getSignalBars(data.status.signal);
+            statusEl.innerHTML = `
+                <div class="network-card connected">
+                    <div class="network-card-header">
+                        <span class="network-signal">${signalBars}</span>
+                        <span class="network-ssid">${escapeHtml(data.status.ssid || 'Unknown')}</span>
+                        <span class="badge badge-completed">Connected</span>
+                    </div>
+                    <div class="network-card-details">
+                        <div class="network-detail">
+                            <span class="network-detail-label">IP Address:</span>
+                            <span class="network-detail-value">${escapeHtml(data.status.ip_address || 'N/A')}</span>
+                        </div>
+                        <div class="network-detail">
+                            <span class="network-detail-label">Interface:</span>
+                            <span class="network-detail-value">${escapeHtml(data.status.interface || 'N/A')}</span>
+                        </div>
+                        <div class="network-detail">
+                            <span class="network-detail-label">Signal:</span>
+                            <span class="network-detail-value">${data.status.signal || 0}%</span>
+                        </div>
+                    </div>
+                    <button class="btn btn-danger btn-sm" onclick="disconnectNetwork()" style="margin-top: 12px;">
+                        Disconnect
+                    </button>
+                </div>
+            `;
+        } else {
+            statusEl.innerHTML = `
+                <div class="network-card disconnected">
+                    <div class="network-card-header">
+                        <span class="network-signal">&#10006;</span>
+                        <span class="network-ssid">Not connected</span>
+                        <span class="badge badge-failed">Disconnected</span>
+                    </div>
+                    <div class="network-card-details">
+                        <p style="color: var(--text-secondary); font-size: 14px; margin: 8px 0 0 0;">
+                            Scan for networks to connect
+                        </p>
+                    </div>
+                </div>
+            `;
+        }
+    } catch (error) {
+        statusEl.innerHTML = `
+            <div class="network-card error">
+                <span style="color: var(--red);">Error: ${escapeHtml(error.message)}</span>
+            </div>
+        `;
+    }
+}
+
+async function loadAPStatus() {
+    const statusEl = document.getElementById('ap-status');
+    const startBtn = document.getElementById('ap-start-btn');
+    const stopBtn = document.getElementById('ap-stop-btn');
+
+    try {
+        const response = await fetch('/api/network/ap/status');
+        if (!response.ok) throw new Error('Failed to load AP status');
+
+        const data = await response.json();
+        networkState.apStatus = data.status;
+
+        if (data.status.running) {
+            statusEl.innerHTML = `
+                <div class="network-card connected">
+                    <div class="network-card-header">
+                        <span class="network-signal">&#128246;</span>
+                        <span class="network-ssid">${escapeHtml(data.status.ssid || 'Unknown')}</span>
+                        <span class="badge badge-completed">Running</span>
+                    </div>
+                    <div class="network-card-details">
+                        <div class="network-detail">
+                            <span class="network-detail-label">IP Address:</span>
+                            <span class="network-detail-value">${escapeHtml(data.status.ip_address || 'N/A')}</span>
+                        </div>
+                        <div class="network-detail">
+                            <span class="network-detail-label">Interface:</span>
+                            <span class="network-detail-value">${escapeHtml(data.status.interface || 'N/A')}</span>
+                        </div>
+                    </div>
+                </div>
+            `;
+            startBtn.style.display = 'none';
+            stopBtn.style.display = 'inline-block';
+        } else {
+            statusEl.innerHTML = `
+                <div class="network-card disconnected">
+                    <div class="network-card-header">
+                        <span class="network-signal">&#10006;</span>
+                        <span class="network-ssid">Access Point not running</span>
+                        <span class="badge badge-failed">Stopped</span>
+                    </div>
+                    <div class="network-card-details">
+                        <p style="color: var(--text-secondary); font-size: 14px; margin: 8px 0 0 0;">
+                            Start AP mode to allow other devices to connect for configuration
+                        </p>
+                    </div>
+                </div>
+            `;
+            startBtn.style.display = 'inline-block';
+            stopBtn.style.display = 'none';
+        }
+    } catch (error) {
+        statusEl.innerHTML = `
+            <div class="network-card error">
+                <span style="color: var(--red);">Error: ${escapeHtml(error.message)}</span>
+            </div>
+        `;
+        startBtn.style.display = 'none';
+        stopBtn.style.display = 'none';
+    }
+}
+
+async function scanNetworks() {
+    const btn = document.getElementById('scan-btn');
+    const listEl = document.getElementById('network-list');
+
+    btn.disabled = true;
+    btn.textContent = '🔄 Scanning...';
+    listEl.innerHTML = '<div style="color: var(--text-secondary); padding: 12px;">Scanning for networks...</div>';
+
+    try {
+        const response = await fetch('/api/network/scan');
+        if (!response.ok) throw new Error('Scan failed');
+
+        const data = await response.json();
+        networkState.availableNetworks = data.networks || [];
+
+        if (networkState.availableNetworks.length === 0) {
+            listEl.innerHTML = '<div style="color: var(--text-secondary); padding: 12px;">No networks found</div>';
+        } else {
+            listEl.innerHTML = '';
+            networkState.availableNetworks.forEach(network => {
+                const div = document.createElement('div');
+                div.className = 'network-item';
+                if (network.in_use) div.classList.add('connected');
+
+                const signalBars = getSignalBars(network.signal);
+                const securityIcon = network.security === 'Open' ? '&#128275;' : '&#128274;';
+
+                div.innerHTML = `
+                    <div class="network-item-info">
+                        <span class="network-signal">${signalBars}</span>
+                        <span class="network-name">${escapeHtml(network.ssid)}</span>
+                        ${network.in_use ? '<span class="badge badge-completed" style="margin-left: 8px; font-size: 11px;">Connected</span>' : ''}
+                    </div>
+                    <div class="network-item-meta">
+                        <span class="network-security" title="${escapeHtml(network.security)}">${securityIcon}</span>
+                        <span class="network-signal-text">${network.signal}%</span>
+                        ${!network.in_use ? `<button class="btn btn-primary btn-sm" onclick="showConnectForm('${escapeHtml(network.ssid)}', '${escapeHtml(network.security)}')">Connect</button>` : ''}
+                    </div>
+                `;
+                listEl.appendChild(div);
+            });
+        }
+    } catch (error) {
+        listEl.innerHTML = `<div style="color: var(--red); padding: 12px;">Error: ${escapeHtml(error.message)}</div>`;
+    } finally {
+        btn.disabled = false;
+        btn.innerHTML = '&#128268; Scan for Networks';
+    }
+}
+
+function getSignalBars(signal) {
+    if (!signal || signal === 0) return '&#128246;';
+    if (signal >= 75) return '&#128246;'; // Strong
+    if (signal >= 50) return '&#128246;'; // Good
+    if (signal >= 25) return '&#128246;'; // Fair
+    return '&#128246;'; // Weak
+}
+
+function showConnectForm(ssid, security) {
+    networkState.selectedSSID = ssid;
+    document.getElementById('connect-ssid').value = ssid;
+    document.getElementById('connect-password').value = '';
+
+    // If open network, disable password field
+    if (security === 'Open') {
+        document.getElementById('connect-password').disabled = true;
+        document.getElementById('connect-password').placeholder = 'No password required';
+    } else {
+        document.getElementById('connect-password').disabled = false;
+        document.getElementById('connect-password').placeholder = 'WiFi password';
+    }
+
+    document.getElementById('connect-form').style.display = 'block';
+    document.getElementById('connect-password').focus();
+}
+
+function cancelConnect() {
+    document.getElementById('connect-form').style.display = 'none';
+    networkState.selectedSSID = null;
+}
+
+async function connectToNetwork() {
+    const ssid = document.getElementById('connect-ssid').value;
+    const password = document.getElementById('connect-password').value;
+
+    if (!ssid) {
+        showMessage('settings-message', 'error', 'Please select a network');
+        return;
+    }
+
+    const connectBtn = document.querySelector('#connect-form .btn-primary');
+    connectBtn.disabled = true;
+    connectBtn.textContent = 'Connecting...';
+
+    try {
+        const payload = { ssid };
+        if (password && !document.getElementById('connect-password').disabled) {
+            payload.password = password;
+        }
+
+        const response = await fetch('/api/network/connect', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        });
+
+        const result = await response.json();
+
+        if (response.ok) {
+            showMessage('settings-message', 'success', `Connected to ${ssid}`);
+            cancelConnect();
+            // Reload network status after a short delay
+            setTimeout(() => {
+                loadNetworkStatus();
+            }, 2000);
+        } else {
+            showMessage('settings-message', 'error', result.detail || 'Connection failed');
+            connectBtn.disabled = false;
+            connectBtn.textContent = 'Connect';
+        }
+    } catch (error) {
+        showMessage('settings-message', 'error', error.message);
+        connectBtn.disabled = false;
+        connectBtn.textContent = 'Connect';
+    }
+}
+
+async function disconnectNetwork() {
+    if (!confirm('Disconnect from current WiFi network?')) return;
+
+    try {
+        const response = await fetch('/api/network/disconnect', { method: 'POST' });
+        const result = await response.json();
+
+        if (response.ok) {
+            showMessage('settings-message', 'success', 'Disconnected from WiFi');
+            loadNetworkStatus();
+        } else {
+            showMessage('settings-message', 'error', result.detail || 'Disconnect failed');
+        }
+    } catch (error) {
+        showMessage('settings-message', 'error', error.message);
+    }
+}
+
+async function startAccessPoint() {
+    if (!confirm('Start Access Point mode? This will allow other devices to connect to configure the phone.')) return;
+
+    const btn = document.getElementById('ap-start-btn');
+    btn.disabled = true;
+    btn.textContent = 'Starting...';
+
+    try {
+        const response = await fetch('/api/network/ap/start', { method: 'POST' });
+        const result = await response.json();
+
+        if (response.ok) {
+            showMessage('settings-message', 'success', 'Access Point started');
+            loadAPStatus();
+        } else {
+            showMessage('settings-message', 'error', result.detail || 'Failed to start AP');
+            btn.disabled = false;
+            btn.textContent = 'Start Access Point';
+        }
+    } catch (error) {
+        showMessage('settings-message', 'error', error.message);
+        btn.disabled = false;
+        btn.textContent = 'Start Access Point';
+    }
+}
+
+async function stopAccessPoint() {
+    if (!confirm('Stop Access Point mode?')) return;
+
+    const btn = document.getElementById('ap-stop-btn');
+    btn.disabled = true;
+    btn.textContent = 'Stopping...';
+
+    try {
+        const response = await fetch('/api/network/ap/stop', { method: 'POST' });
+        const result = await response.json();
+
+        if (response.ok) {
+            showMessage('settings-message', 'success', 'Access Point stopped');
+            loadAPStatus();
+        } else {
+            showMessage('settings-message', 'error', result.detail || 'Failed to stop AP');
+            btn.disabled = false;
+            btn.textContent = 'Stop Access Point';
+        }
+    } catch (error) {
+        showMessage('settings-message', 'error', error.message);
+        btn.disabled = false;
+        btn.textContent = 'Stop Access Point';
+    }
 }
 
 // =============================================================================

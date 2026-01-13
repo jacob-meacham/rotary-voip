@@ -1,0 +1,447 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Rotary Phone Setup</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+
+        .container {
+            background: white;
+            border-radius: 16px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            max-width: 480px;
+            width: 100%;
+            overflow: hidden;
+        }
+
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 32px 24px;
+            text-align: center;
+        }
+
+        .header-icon {
+            font-size: 48px;
+            margin-bottom: 12px;
+        }
+
+        .header-title {
+            font-size: 24px;
+            font-weight: 600;
+            margin-bottom: 8px;
+        }
+
+        .header-subtitle {
+            font-size: 14px;
+            opacity: 0.9;
+        }
+
+        .content {
+            padding: 24px;
+        }
+
+        .status {
+            padding: 16px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            text-align: center;
+            font-size: 14px;
+            display: none;
+        }
+
+        .status.success {
+            background: #d1fae5;
+            color: #065f46;
+            border: 1px solid #6ee7b7;
+        }
+
+        .status.error {
+            background: #fee2e2;
+            color: #991b1b;
+            border: 1px solid #fca5a5;
+        }
+
+        .status.info {
+            background: #dbeafe;
+            color: #1e40af;
+            border: 1px solid #93c5fd;
+        }
+
+        .section-title {
+            font-size: 14px;
+            font-weight: 600;
+            color: #374151;
+            margin-bottom: 12px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .btn {
+            width: 100%;
+            padding: 12px;
+            border: none;
+            border-radius: 8px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+
+        .btn-primary:hover:not(:disabled) {
+            transform: translateY(-1px);
+            box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+        }
+
+        .btn-primary:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+
+        .network-list {
+            margin: 16px 0;
+            max-height: 300px;
+            overflow-y: auto;
+        }
+
+        .network-item {
+            background: #f9fafb;
+            border: 1px solid #e5e7eb;
+            border-radius: 8px;
+            padding: 12px;
+            margin-bottom: 8px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .network-item:hover {
+            background: #f3f4f6;
+            border-color: #667eea;
+        }
+
+        .network-item.selected {
+            background: #eef2ff;
+            border-color: #667eea;
+            border-width: 2px;
+        }
+
+        .network-info {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .network-signal {
+            font-size: 20px;
+        }
+
+        .network-name {
+            font-size: 14px;
+            font-weight: 500;
+            color: #111827;
+        }
+
+        .network-meta {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 12px;
+            color: #6b7280;
+        }
+
+        .form-group {
+            margin-bottom: 16px;
+        }
+
+        .form-label {
+            display: block;
+            font-size: 13px;
+            font-weight: 500;
+            color: #374151;
+            margin-bottom: 6px;
+        }
+
+        .form-input {
+            width: 100%;
+            padding: 10px 12px;
+            border: 1px solid #d1d5db;
+            border-radius: 8px;
+            font-size: 14px;
+            transition: all 0.2s;
+        }
+
+        .form-input:focus {
+            outline: none;
+            border-color: #667eea;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+        }
+
+        .form-input:disabled {
+            background: #f3f4f6;
+            color: #9ca3af;
+            cursor: not-allowed;
+        }
+
+        .spinner {
+            display: inline-block;
+            width: 16px;
+            height: 16px;
+            border: 2px solid rgba(255, 255, 255, 0.3);
+            border-radius: 50%;
+            border-top-color: white;
+            animation: spin 0.6s linear infinite;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        .hidden {
+            display: none;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <div class="header-icon">&#9742;</div>
+            <div class="header-title">Rotary Phone Setup</div>
+            <div class="header-subtitle">Connect to your WiFi network</div>
+        </div>
+
+        <div class="content">
+            <div id="status" class="status"></div>
+
+            <!-- Step 1: Scan Networks -->
+            <div id="step-scan">
+                <div class="section-title">
+                    <span>&#128268;</span>
+                    <span>Available Networks</span>
+                </div>
+                <button class="btn btn-primary" onclick="scanNetworks()" id="scan-btn">
+                    Scan for Networks
+                </button>
+                <div id="network-list" class="network-list"></div>
+            </div>
+
+            <!-- Step 2: Enter Password -->
+            <div id="step-password" class="hidden">
+                <div class="section-title">
+                    <span>&#128274;</span>
+                    <span>Enter Password</span>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Network Name</label>
+                    <input type="text" class="form-input" id="connect-ssid" readonly>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Password</label>
+                    <input type="password" class="form-input" id="connect-password" placeholder="Enter WiFi password">
+                </div>
+                <button class="btn btn-primary" onclick="connectToNetwork()" id="connect-btn">
+                    Connect
+                </button>
+                <button class="btn btn-primary" onclick="backToScan()" style="margin-top: 8px; background: #6b7280;">
+                    Back
+                </button>
+            </div>
+
+            <!-- Step 3: Success -->
+            <div id="step-success" class="hidden">
+                <div class="section-title">
+                    <span>&#10004;</span>
+                    <span>Connected Successfully</span>
+                </div>
+                <p style="color: #6b7280; font-size: 14px; margin-bottom: 16px;">
+                    You're now connected to WiFi. Redirecting to the admin interface...
+                </p>
+                <div style="text-align: center;">
+                    <div class="spinner"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let selectedNetwork = null;
+        let networks = [];
+
+        function showStatus(message, type) {
+            const status = document.getElementById('status');
+            status.textContent = message;
+            status.className = `status ${type}`;
+            status.style.display = 'block';
+            setTimeout(() => {
+                status.style.display = 'none';
+            }, 5000);
+        }
+
+        function showStep(step) {
+            document.getElementById('step-scan').classList.add('hidden');
+            document.getElementById('step-password').classList.add('hidden');
+            document.getElementById('step-success').classList.add('hidden');
+            document.getElementById(`step-${step}`).classList.remove('hidden');
+        }
+
+        async function scanNetworks() {
+            const btn = document.getElementById('scan-btn');
+            const listEl = document.getElementById('network-list');
+
+            btn.disabled = true;
+            btn.innerHTML = '<span class="spinner"></span> Scanning...';
+            listEl.innerHTML = '<div style="text-align: center; padding: 20px; color: #6b7280;">Scanning for networks...</div>';
+
+            try {
+                const response = await fetch('/api/network/scan');
+                if (!response.ok) throw new Error('Scan failed');
+
+                const data = await response.json();
+                networks = data.networks || [];
+
+                if (networks.length === 0) {
+                    listEl.innerHTML = '<div style="text-align: center; padding: 20px; color: #6b7280;">No networks found</div>';
+                } else {
+                    listEl.innerHTML = '';
+                    networks.forEach((network, index) => {
+                        const div = document.createElement('div');
+                        div.className = 'network-item';
+                        div.onclick = () => selectNetwork(network);
+
+                        const signalBars = getSignalIcon(network.signal);
+                        const securityIcon = network.security === 'Open' ? '&#128275;' : '&#128274;';
+
+                        div.innerHTML = `
+                            <div class="network-info">
+                                <span class="network-signal">${signalBars}</span>
+                                <span class="network-name">${escapeHtml(network.ssid)}</span>
+                            </div>
+                            <div class="network-meta">
+                                <span>${securityIcon}</span>
+                                <span>${network.signal}%</span>
+                            </div>
+                        `;
+                        listEl.appendChild(div);
+                    });
+                }
+            } catch (error) {
+                showStatus('Error scanning networks: ' + error.message, 'error');
+                listEl.innerHTML = '<div style="text-align: center; padding: 20px; color: #dc2626;">Error scanning networks</div>';
+            } finally {
+                btn.disabled = false;
+                btn.textContent = 'Rescan';
+            }
+        }
+
+        function getSignalIcon(signal) {
+            if (signal >= 75) return '&#128246;&#128246;&#128246;';
+            if (signal >= 50) return '&#128246;&#128246;';
+            if (signal >= 25) return '&#128246;';
+            return '&#9888;';
+        }
+
+        function selectNetwork(network) {
+            selectedNetwork = network;
+            document.getElementById('connect-ssid').value = network.ssid;
+            document.getElementById('connect-password').value = '';
+
+            if (network.security === 'Open') {
+                document.getElementById('connect-password').disabled = true;
+                document.getElementById('connect-password').placeholder = 'No password required';
+            } else {
+                document.getElementById('connect-password').disabled = false;
+                document.getElementById('connect-password').placeholder = 'Enter WiFi password';
+            }
+
+            showStep('password');
+        }
+
+        function backToScan() {
+            selectedNetwork = null;
+            showStep('scan');
+        }
+
+        async function connectToNetwork() {
+            if (!selectedNetwork) return;
+
+            const ssid = document.getElementById('connect-ssid').value;
+            const password = document.getElementById('connect-password').value;
+            const btn = document.getElementById('connect-btn');
+
+            if (selectedNetwork.security !== 'Open' && !password) {
+                showStatus('Please enter a password', 'error');
+                return;
+            }
+
+            btn.disabled = true;
+            btn.innerHTML = '<span class="spinner"></span> Connecting...';
+
+            try {
+                const payload = { ssid };
+                if (password && selectedNetwork.security !== 'Open') {
+                    payload.password = password;
+                }
+
+                const response = await fetch('/api/network/connect', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+
+                const result = await response.json();
+
+                if (response.ok) {
+                    showStep('success');
+                    // Wait 3 seconds then redirect to main UI
+                    setTimeout(() => {
+                        window.location.href = '/';
+                    }, 3000);
+                } else {
+                    showStatus(result.detail || 'Connection failed', 'error');
+                    btn.disabled = false;
+                    btn.textContent = 'Connect';
+                }
+            } catch (error) {
+                showStatus('Error connecting: ' + error.message, 'error');
+                btn.disabled = false;
+                btn.textContent = 'Connect';
+            }
+        }
+
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        // Auto-scan on load
+        window.addEventListener('DOMContentLoaded', () => {
+            scanNetworks();
+        });
+    </script>
+</body>
+</html>

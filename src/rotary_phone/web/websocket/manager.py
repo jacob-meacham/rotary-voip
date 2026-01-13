@@ -30,7 +30,9 @@ class ConnectionManager:
         await websocket.accept()
         async with self._lock:
             self.active_connections.append(websocket)
-        logger.info("WebSocket client connected. Total connections: %d", len(self.active_connections))
+        logger.info(
+            "WebSocket client connected. Total connections: %d", len(self.active_connections)
+        )
 
     async def disconnect(self, websocket: WebSocket) -> None:
         """Remove a WebSocket connection.
@@ -41,7 +43,9 @@ class ConnectionManager:
         async with self._lock:
             if websocket in self.active_connections:
                 self.active_connections.remove(websocket)
-        logger.info("WebSocket client disconnected. Total connections: %d", len(self.active_connections))
+        logger.info(
+            "WebSocket client disconnected. Total connections: %d", len(self.active_connections)
+        )
 
     async def send_personal_message(self, message: str, websocket: WebSocket) -> None:
         """Send a message to a specific connection.
@@ -66,7 +70,9 @@ class ConnectionManager:
             return
 
         message = event.model_dump_json()
-        logger.debug("Broadcasting event: %s to %d clients", event.type, len(self.active_connections))
+        logger.debug(
+            "Broadcasting event: %s to %d clients", event.type, len(self.active_connections)
+        )
 
         # Create a copy of connections to iterate over
         async with self._lock:
