@@ -1192,6 +1192,23 @@ def create_app(  # pylint: disable=too-many-statements
         # Default fallback
         return JSONResponse(status_code=400, content={"detail": error_msg or "Validation error"})
 
+    # -------------------------------------------------------------------------
+    # SPA Catch-All Route (must be last)
+    # -------------------------------------------------------------------------
+
+    @app.get("/{full_path:path}")
+    async def spa_catch_all(full_path: str) -> FileResponse:
+        """Catch-all route for SPA - serves index.html for all non-API routes.
+
+        This enables client-side routing with clean URLs. Must be defined last
+        so it doesn't override other routes.
+        """
+        # Only serve index.html for non-API routes
+        if not full_path.startswith("api/") and not full_path.startswith("static/"):
+            return FileResponse(static_dir / "index.html")
+        # If somehow we get here for an API route, return 404
+        raise HTTPException(status_code=404, detail="Not found")
+
     logger.info("FastAPI application created")
     return app
 

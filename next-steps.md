@@ -355,30 +355,31 @@ logging:
 
 ---
 
-## Phase W10: Deep Linking & URL Routing
+## Phase W10: Deep Linking & URL Routing - COMPLETE
 
 ### Goal
 Enable direct URL access to specific pages and preserve navigation state.
 
 ### Backend Tasks
-- [ ] Serve index.html for all non-API routes (SPA catch-all)
+- [x] Serve index.html for all non-API routes (SPA catch-all)
 
 ### Frontend Tasks
-- [ ] Implement client-side routing with History API
-- [ ] URL structure:
+- [x] Implement client-side routing with History API
+- [x] URL structure:
   - `/` or `/dashboard` - Dashboard page
   - `/calls` - Call log page
   - `/calls/:id` - Call detail modal (auto-open)
   - `/settings` - Settings page
-  - `/settings/allowlist` - Settings with Allowlist section open
-  - `/settings/speed-dial` - Settings with Speed Dial section open
+  - `/allowlist` - Allowlist page
+  - `/speed-dial` - Speed dial page
   - `/settings/sounds` - Settings with Sounds section open
   - `/settings/advanced` - Settings with Advanced section open
-- [ ] Update navigation to use `pushState`
-- [ ] Handle browser back/forward buttons
-- [ ] Parse URL on page load and navigate accordingly
-- [ ] Update page title based on current route
-- [ ] Shareable URLs (copy link to current view)
+  - `/logs` - Logs
+- [x] Update navigation to use `pushState`
+- [x] Handle browser back/forward buttons
+- [x] Parse URL on page load and navigate accordingly
+- [x] Update page title based on current route
+- [x] Shareable URLs (copy link to current view)
 
 ### Technical Approach
 ```javascript
@@ -392,7 +393,7 @@ history.pushState({page: 'calls'}, 'Call Log', '/calls');
 
 ```
 Phase W1: Allowlist ─────────────────┐
-Phase W2: Speed Dial ────────────────┼──► COMPLETE (W1-W7, W9)
+Phase W2: Speed Dial ────────────────┼──► COMPLETE (W1-W7, W9-W10)
 Phase W3: Sound Management ──────────┤
 Phase W4: Ring Settings ─────────────┤
 Phase W5: Call Log ──────────────────┤
@@ -406,7 +407,7 @@ Phase W8: Authentication ────────────► Should be near 
 Phase W9: Advanced Settings ─────────► COMPLETE - Log viewer, timing config
                                      │
                                      ▼
-Phase W10: Deep Linking ─────────────► URL routing (can be done earlier)
+Phase W10: Deep Linking ─────────────► COMPLETE - URL routing with History API
 ```
 
 ---

@@ -35,14 +35,75 @@ let wsMaxReconnectDelay = 30000; // Max 30 seconds
 let wsConnected = false;
 
 // =============================================================================
-// Navigation
+// Navigation & Routing
 // =============================================================================
 
-function showPage(pageName) {
+// Route configuration
+const routes = {
+    '/': 'dashboard',
+    '/dashboard': 'dashboard',
+    '/calls': 'calls',
+    '/allowlist': 'allowlist',
+    '/speeddial': 'speeddial',
+    '/settings': 'settings',
+    '/logs': 'logs'
+};
+
+// Page titles
+const pageTitles = {
+    'dashboard': 'Dashboard - Rotary Phone',
+    'calls': 'Call Log - Rotary Phone',
+    'allowlist': 'Allowed Numbers - Rotary Phone',
+    'speeddial': 'Speed Dial - Rotary Phone',
+    'settings': 'Advanced Settings - Rotary Phone',
+    'logs': 'System Logs - Rotary Phone'
+};
+
+function parseRoute(path) {
+    // Remove query string and hash
+    path = path.split('?')[0].split('#')[0];
+
+    // Handle call details route (/calls/123)
+    if (path.startsWith('/calls/') && path.length > 7) {
+        const callId = path.substring(7);
+        return { page: 'calls', callId: parseInt(callId) };
+    }
+
+    // Handle settings sub-routes (/settings/sounds, etc.)
+    if (path.startsWith('/settings/')) {
+        const section = path.substring(10);
+        return { page: 'settings', section };
+    }
+
+    // Look up the page from routes
+    const page = routes[path] || 'dashboard';
+    return { page };
+}
+
+function navigateTo(path, pushState = true) {
+    const route = parseRoute(path);
+
+    // Update history if needed
+    if (pushState && window.location.pathname !== path) {
+        history.pushState({ page: route.page }, '', path);
+    }
+
+    // Show the page
+    showPage(route.page, route);
+}
+
+function showPage(pageName, routeData = {}) {
     document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
     document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
 
-    document.getElementById('page-' + pageName).classList.add('active');
+    const pageEl = document.getElementById('page-' + pageName);
+    if (!pageEl) {
+        // Page not found, redirect to dashboard
+        navigateTo('/dashboard');
+        return;
+    }
+
+    pageEl.classList.add('active');
 
     // Find and highlight the nav item (if in sidebar)
     const navItems = document.querySelectorAll('.sidebar-nav .nav-item');
@@ -55,14 +116,33 @@ function showPage(pageName) {
 
     currentPage = pageName;
 
+    // Update page title
+    document.title = pageTitles[pageName] || 'Rotary Phone';
+
+    // Load page-specific data
     if (pageName === 'calls') {
         callLogState.currentPage = 0;
         loadCallLog();
+
+        // Handle call details modal if callId provided
+        if (routeData.callId) {
+            showCallDetails(routeData.callId);
+        }
     } else if (pageName === 'settings') {
         loadSoundFiles();
         loadSystemConfig();
         loadNetworkStatus();
         loadAPStatus();
+
+        // Open specific section if provided
+        if (routeData.section) {
+            setTimeout(() => {
+                const sectionEl = document.getElementById('section-' + routeData.section);
+                if (sectionEl && !sectionEl.classList.contains('open')) {
+                    sectionEl.classList.add('open');
+                }
+            }, 100);
+        }
     } else if (pageName === 'dashboard') {
         loadStatus();
         loadDashboardStats();
@@ -84,6 +164,12 @@ function toggleSection(name) {
     const section = document.getElementById('section-' + name);
     section.classList.toggle('open');
 }
+
+// Handle browser back/forward buttons
+window.addEventListener('popstate', (event) => {
+    const path = window.location.pathname;
+    navigateTo(path, false); // Don't push state again
+});
 
 // =============================================================================
 // WebSocket Connection
@@ -1705,9 +1791,9 @@ async function changeLogLevel() {
 // =============================================================================
 
 document.addEventListener('DOMContentLoaded', () => {
-    loadStatus();
-    loadDashboardStats();
-    loadRecentCalls();
+    // Handle initial route from URL
+    const initialPath = window.location.pathname;
+    navigateTo(initialPath, false); // Don't push state on initial load
 
     // Connect to WebSocket for real-time updates
     connectWebSocket();
