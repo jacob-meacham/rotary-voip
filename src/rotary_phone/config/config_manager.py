@@ -5,6 +5,8 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, TypeVar, Union
 
 import yaml
+from ruamel.yaml import YAML, YAMLError as RuamelYAMLError
+from ruamel.yaml.comments import CommentedMap
 
 T = TypeVar("T")
 
@@ -29,11 +31,16 @@ class ConfigManager:
             ConfigError: If config file doesn't exist or is invalid
         """
         self._config: Dict[str, Any] = {}
+        self._raw_yaml: Optional[CommentedMap] = None  # Preserves comments/ordering
         self._user_config_path = user_config_path
+        self._ruamel = YAML()
+        self._ruamel.preserve_quotes = True
         self._load_config()
 
     def _load_yaml_file(self, path: Path) -> Dict[str, Any]:
         """Load a YAML file and return its contents.
+
+        Uses ruamel.yaml to preserve comments and key ordering for round-trip editing.
 
         Args:
             path: Path to YAML file
@@ -46,11 +53,14 @@ class ConfigManager:
         """
         try:
             with open(path, "r", encoding="utf-8") as f:
-                content = yaml.safe_load(f)
-                return content if content is not None else {}
+                content = self._ruamel.load(f)
+                if content is None:
+                    content = CommentedMap()
+                self._raw_yaml = content
+                return dict(content) if content else {}
         except FileNotFoundError as e:
             raise ConfigError(f"Config file not found: {path}") from e
-        except yaml.YAMLError as e:
+        except (yaml.YAMLError, RuamelYAMLError) as e:
             raise ConfigError(f"Failed to parse YAML file {path}: {e}") from e
         except OSError as e:
             raise ConfigError(f"Failed to load config file {path}: {e}") from e
@@ -228,19 +238,31 @@ class ConfigManager:
         Raises:
             ConfigError: If updates would make config invalid
         """
-        # Apply updates to _config
+        # Apply updates to both _config and _raw_yaml (preserves comments/ordering)
         for key, value in updates.items():
             keys = key.split(".")
-            d = self._config
+            # Update _config
+            d: Any = self._config
             for k in keys[:-1]:
                 d = d.setdefault(k, {})
             d[keys[-1]] = value
+
+            # Update _raw_yaml to preserve comments
+            if self._raw_yaml is not None:
+                rd: Any = self._raw_yaml
+                for k in keys[:-1]:
+                    if k not in rd:
+                        rd[k] = CommentedMap()
+                    rd = rd[k]
+                rd[keys[-1]] = value
 
         # Validate before accepting changes
         self._validate_config()
 
     def save_config(self, output_path: str) -> None:
         """Save current configuration to YAML file (atomic write).
+
+        Preserves comments and key ordering from the original file.
 
         Args:
             output_path: Path to save configuration file
@@ -255,11 +277,15 @@ class ConfigManager:
 
         tmp_path = None
         try:
+            # Use raw YAML data if available (preserves comments/ordering),
+            # otherwise fall back to plain config
+            data_to_save = self._raw_yaml if self._raw_yaml is not None else self._config
+
             # Write to temp file first (atomic operation)
             with tempfile.NamedTemporaryFile(
                 mode="w", delete=False, suffix=".yaml", encoding="utf-8"
             ) as tmp:
-                yaml.dump(self._config, tmp, default_flow_style=False, allow_unicode=True)
+                self._ruamel.dump(data_to_save, tmp)
                 tmp_path = tmp.name
 
             # Atomic rename

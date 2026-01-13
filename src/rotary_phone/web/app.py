@@ -933,7 +933,7 @@ async def stop_ap(request: Request) -> Dict[str, Any]:
 
 
 @auth_router.post("/login")
-async def login(request: Request) -> Dict[str, Any]:
+async def login(request: Request) -> JSONResponse:
     """Login and create session.
 
     Request body:
@@ -979,7 +979,7 @@ async def login(request: Request) -> Dict[str, Any]:
 
 
 @auth_router.post("/logout")
-async def logout(request: Request) -> Dict[str, Any]:
+async def logout(request: Request) -> JSONResponse:
     """Logout and destroy session."""
     auth_manager: AuthManager = request.app.state.auth_manager
     session_id = request.cookies.get("session_id")

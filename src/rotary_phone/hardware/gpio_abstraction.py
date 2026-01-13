@@ -272,36 +272,51 @@ class MockGPIO(GPIO):  # pylint: disable=too-many-instance-attributes
 
 
 class RealGPIO(GPIO):
-    """Real GPIO implementation using RPi.GPIO."""
+    """Real GPIO implementation using lgpio."""
 
     def __init__(self) -> None:
-        """Initialize real GPIO using RPi.GPIO."""
+        """Initialize real GPIO using lgpio."""
         try:
-            import RPi.GPIO as gpio  # type: ignore  # pylint: disable=import-outside-toplevel
+            import lgpio  # type: ignore  # pylint: disable=import-outside-toplevel
 
-            self._gpio = gpio
-            logger.info("Real GPIO initialized using RPi.GPIO")
+            self._lgpio = lgpio
+            self._handle = lgpio.gpiochip_open(0)
+            self._callbacks: Dict[int, Any] = {}
+            self._pin_modes: Dict[int, PinMode] = {}
+            logger.info("Real GPIO initialized using lgpio")
         except ImportError as e:
-            raise RuntimeError("RPi.GPIO not available. Install it or use mock GPIO mode.") from e
+            raise RuntimeError("lgpio not available. Install it or use mock GPIO mode.") from e
 
     def setmode(self, mode: str) -> None:
-        """Set the pin numbering mode."""
-        self._gpio.setmode(getattr(self._gpio, mode))
+        """Set the pin numbering mode (BCM only supported with lgpio)."""
+        if mode != "BCM":
+            logger.warning("lgpio only supports BCM mode, ignoring mode: %s", mode)
 
     def setup(self, pin: int, mode: PinMode, pull_up_down: PullMode = PullMode.OFF) -> None:
         """Set up a GPIO pin."""
-        gpio_mode = self._gpio.IN if mode == PinMode.IN else self._gpio.OUT
-        gpio_pull = getattr(self._gpio, f"PUD_{pull_up_down.name}")
-        self._gpio.setup(pin, gpio_mode, pull_up_down=gpio_pull)
+        # Map pull mode to lgpio flags
+        pull_flags = {
+            PullMode.OFF: self._lgpio.SET_PULL_NONE,
+            PullMode.UP: self._lgpio.SET_PULL_UP,
+            PullMode.DOWN: self._lgpio.SET_PULL_DOWN,
+        }
+        flags = pull_flags.get(pull_up_down, self._lgpio.SET_PULL_NONE)
+
+        if mode == PinMode.IN:
+            self._lgpio.gpio_claim_input(self._handle, pin, flags)
+        else:
+            self._lgpio.gpio_claim_output(self._handle, pin, 0, flags)
+
+        self._pin_modes[pin] = mode
 
     def input(self, pin: int) -> int:
         """Read the value of a GPIO pin."""
-        result: int = self._gpio.input(pin)
+        result: int = self._lgpio.gpio_read(self._handle, pin)
         return result
 
     def output(self, pin: int, value: int) -> None:
         """Set the value of a GPIO pin."""
-        self._gpio.output(pin, value)
+        self._lgpio.gpio_write(self._handle, pin, value)
 
     def add_event_detect(
         self,
@@ -311,23 +326,50 @@ class RealGPIO(GPIO):
         bouncetime: int = 0,
     ) -> None:
         """Add edge detection to a pin."""
-        gpio_edge = getattr(self._gpio, edge.name)
-        self._gpio.add_event_detect(pin, gpio_edge, callback=callback, bouncetime=bouncetime)
+        # Map edge to lgpio constant
+        edge_map = {
+            Edge.RISING: self._lgpio.RISING_EDGE,
+            Edge.FALLING: self._lgpio.FALLING_EDGE,
+            Edge.BOTH: self._lgpio.BOTH_EDGES,
+        }
+        lgpio_edge = edge_map[edge]
+
+        if callback:
+            # lgpio callback signature is (chip, gpio, level, timestamp)
+            # Wrap to match RPi.GPIO signature (pin)
+            def wrapped_callback(
+                chip: int, gpio: int, level: int, timestamp: int  # pylint: disable=unused-argument
+            ) -> None:
+                callback(gpio)
+
+            cb = self._lgpio.callback(self._handle, pin, lgpio_edge, wrapped_callback)
+            self._callbacks[pin] = cb
 
     def remove_event_detect(self, pin: int) -> None:
         """Remove edge detection from a pin."""
-        self._gpio.remove_event_detect(pin)
+        if pin in self._callbacks:
+            self._callbacks[pin].cancel()
+            del self._callbacks[pin]
 
     def cleanup(self, pin: Optional[int] = None) -> None:
         """Clean up GPIO resources."""
         if pin is None:
-            self._gpio.cleanup()
+            # Cancel all callbacks and close handle
+            for cb in self._callbacks.values():
+                cb.cancel()
+            self._callbacks.clear()
+            self._lgpio.gpiochip_close(self._handle)
         else:
-            self._gpio.cleanup(pin)
+            # Free specific pin
+            if pin in self._callbacks:
+                self._callbacks[pin].cancel()
+                del self._callbacks[pin]
+            self._lgpio.gpio_free(self._handle, pin)
+            self._pin_modes.pop(pin, None)
 
     def setwarnings(self, enable: bool) -> None:
-        """Enable or disable warnings."""
-        self._gpio.setwarnings(enable)
+        """Enable or disable warnings (no-op for lgpio)."""
+        _ = enable  # lgpio doesn't have a warnings setting
 
 
 def get_gpio(mock: bool) -> GPIO:

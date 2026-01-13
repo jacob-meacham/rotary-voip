@@ -37,7 +37,17 @@ if [[ ! -d "$INSTALL_DIR" ]]; then
     exit 1
 fi
 
+# Commands that require root
+require_root() {
+    if [[ $EUID -ne 0 ]]; then
+        echo -e "${RED}Error:${NC} This command requires root privileges"
+        echo "Run with: sudo rotary-voip $*"
+        exit 1
+    fi
+}
+
 cmd_update() {
+    require_root update
     echo -e "${BLUE}==>${NC} Updating rotary-voip..."
 
     cd "$INSTALL_DIR"
@@ -74,28 +84,33 @@ cmd_logs() {
 }
 
 cmd_restart() {
+    require_root restart
     echo -e "${GREEN}[INFO]${NC} Restarting $SERVICE_NAME..."
     systemctl restart "$SERVICE_NAME"
     systemctl status "$SERVICE_NAME" --no-pager || true
 }
 
 cmd_stop() {
+    require_root stop
     echo -e "${GREEN}[INFO]${NC} Stopping $SERVICE_NAME..."
     systemctl stop "$SERVICE_NAME"
 }
 
 cmd_start() {
+    require_root start
     echo -e "${GREEN}[INFO]${NC} Starting $SERVICE_NAME..."
     systemctl start "$SERVICE_NAME"
     systemctl status "$SERVICE_NAME" --no-pager || true
 }
 
 cmd_manage_users() {
+    require_root manage-users
     cd "$INSTALL_DIR"
     .venv/bin/python scripts/manage_users.py --db "$INSTALL_DIR/data/rotary_phone.db" "$@"
 }
 
 cmd_config() {
+    require_root config
     local config_file=""
     if [[ -f "$INSTALL_DIR/config.yml" ]]; then
         config_file="$INSTALL_DIR/config.yml"

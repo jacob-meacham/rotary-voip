@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 import secrets
 from datetime import datetime, timedelta
-from typing import Dict, Optional
+from typing import Callable, Coroutine, Dict, Optional, Any
 
 import bcrypt
 from fastapi import Cookie, HTTPException, status
@@ -144,6 +144,11 @@ class AuthManager:
             logger.warning("Login failed: invalid password for user: %s", username)
             return None
 
+        # User from database always has an id
+        if user.id is None:
+            logger.error("User %s has no id", username)
+            return None
+
         # Create session
         session_id = self.sessions.create_session(user.id)
         logger.info("User logged in: %s (user_id=%d)", username, user.id)
@@ -177,7 +182,9 @@ class AuthManager:
 
 
 # FastAPI dependency for requiring authentication
-def require_auth(auth_manager: AuthManager):
+def require_auth(
+    auth_manager: AuthManager,
+) -> Callable[..., Coroutine[Any, Any, User]]:
     """Create a FastAPI dependency that requires authentication.
 
     Args:
