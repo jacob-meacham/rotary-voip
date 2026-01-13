@@ -189,9 +189,9 @@ VERIFY_PASSED=true
 # Check required directories
 for dir in "$INSTALL_DIR/src" "$INSTALL_DIR/sounds" "$INSTALL_DIR/data" "$INSTALL_DIR/.venv"; do
     if [[ -d "$dir" ]]; then
-        echo -e "  ${GREEN}✓${NC} $dir"
+        echo -e "  ${GREEN}[OK]${NC} $dir"
     else
-        echo -e "  ${RED}✗${NC} $dir"
+        echo -e "  ${RED}[X]${NC} $dir"
         VERIFY_PASSED=false
     fi
 done
@@ -199,25 +199,25 @@ done
 # Check required files
 for file in "$INSTALL_DIR/pyproject.toml" "$INSTALL_DIR/config.yml.example"; do
     if [[ -f "$file" ]]; then
-        echo -e "  ${GREEN}✓${NC} $file"
+        echo -e "  ${GREEN}[OK]${NC} $file"
     else
-        echo -e "  ${RED}✗${NC} $file"
+        echo -e "  ${RED}[X]${NC} $file"
         VERIFY_PASSED=false
     fi
 done
 
 # Check config file
 if [[ -f "$INSTALL_DIR/config.yml" ]] || [[ -f "$INSTALL_DIR/config.yaml" ]]; then
-    echo -e "  ${GREEN}✓${NC} Configuration file found"
+    echo -e "  ${GREEN}[OK]${NC} Configuration file found"
 else
-    echo -e "  ${YELLOW}!${NC} No config.yml - copy from config.yml.example"
+    echo -e "  ${YELLOW}[!]${NC} No config.yml - copy from config.yml.example"
 fi
 
 # Check systemd service
 if systemctl is-enabled rotary-phone.service &>/dev/null; then
-    echo -e "  ${GREEN}✓${NC} Service enabled"
+    echo -e "  ${GREEN}[OK]${NC} Service enabled"
 else
-    echo -e "  ${YELLOW}!${NC} Service not enabled"
+    echo -e "  ${YELLOW}[!]${NC} Service not enabled"
 fi
 
 echo ""
