@@ -3,1433 +3,406 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Rotary Phone Admin</title>
-    <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
-
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
-            background: #1a1a1a;
-            color: #e0e0e0;
-            padding: 20px;
-            line-height: 1.6;
-        }
-
-        .container {
-            max-width: 1200px;
-            margin: 0 auto;
-        }
-
-        h1 {
-            font-size: 2rem;
-            margin-bottom: 1rem;
-            color: #4CAF50;
-        }
-
-        /* Tab Styles */
-        .tabs {
-            display: flex;
-            gap: 10px;
-            margin-bottom: 20px;
-            border-bottom: 2px solid #333;
-        }
-
-        .tab {
-            padding: 12px 24px;
-            background: #2a2a2a;
-            border: none;
-            color: #888;
-            cursor: pointer;
-            font-size: 1rem;
-            transition: all 0.3s;
-            border-radius: 6px 6px 0 0;
-        }
-
-        .tab:hover {
-            background: #333;
-            color: #e0e0e0;
-        }
-
-        .tab.active {
-            background: #4CAF50;
-            color: #fff;
-        }
-
-        .tab-content {
-            display: none;
-        }
-
-        .tab-content.active {
-            display: block;
-        }
-
-        .card {
-            background: #2a2a2a;
-            border-radius: 8px;
-            padding: 20px;
-            margin-bottom: 20px;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.3);
-        }
-
-        .card h2 {
-            font-size: 1.5rem;
-            margin-bottom: 1rem;
-            color: #64B5F6;
-        }
-
-        .status-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-            gap: 15px;
-        }
-
-        .status-item {
-            background: #1a1a1a;
-            padding: 15px;
-            border-radius: 6px;
-            border-left: 4px solid #4CAF50;
-        }
-
-        .status-label {
-            font-size: 0.875rem;
-            color: #888;
-            margin-bottom: 5px;
-        }
-
-        .status-value {
-            font-size: 1.25rem;
-            font-weight: 600;
-            color: #fff;
-        }
-
-        .state-indicator {
-            display: inline-block;
-            width: 12px;
-            height: 12px;
-            border-radius: 50%;
-            margin-right: 8px;
-            animation: pulse 2s infinite;
-        }
-
-        .state-idle { background: #666; }
-        .state-off_hook_waiting { background: #FFC107; }
-        .state-dialing { background: #2196F3; }
-        .state-calling { background: #FF9800; }
-        .state-ringing { background: #9C27B0; animation: pulse 1s infinite; }
-        .state-connected { background: #4CAF50; }
-        .state-error { background: #F44336; }
-
-        @keyframes pulse {
-            0%, 100% { opacity: 1; }
-            50% { opacity: 0.5; }
-        }
-
-        button {
-            background: #4CAF50;
-            color: white;
-            border: none;
-            padding: 10px 20px;
-            border-radius: 6px;
-            font-size: 1rem;
-            cursor: pointer;
-            transition: background 0.3s;
-        }
-
-        button:hover {
-            background: #45a049;
-        }
-
-        button:disabled {
-            background: #555;
-            cursor: not-allowed;
-        }
-
-        .config-item {
-            background: #1a1a1a;
-            padding: 10px 15px;
-            border-radius: 6px;
-            margin-bottom: 10px;
-            display: flex;
-            justify-content: space-between;
-        }
-
-        .config-label {
-            color: #888;
-        }
-
-        .config-value {
-            color: #fff;
-            font-family: monospace;
-        }
-
-        .last-updated {
-            text-align: right;
-            color: #666;
-            font-size: 0.875rem;
-            margin-top: 10px;
-        }
-
-        /* Config Editor Styles */
-        #config-editor {
-            width: 100%;
-            min-height: 500px;
-            background: #1a1a1a;
-            color: #e0e0e0;
-            border: 1px solid #444;
-            border-radius: 6px;
-            padding: 15px;
-            font-family: 'Courier New', monospace;
-            font-size: 14px;
-            line-height: 1.5;
-            resize: vertical;
-        }
-
-        .editor-actions {
-            margin-top: 15px;
-            display: flex;
-            gap: 10px;
-            align-items: center;
-        }
-
-        .message {
-            padding: 12px 20px;
-            border-radius: 6px;
-            margin-bottom: 15px;
-        }
-
-        .message.success {
-            background: #2d5016;
-            border-left: 4px solid #4CAF50;
-        }
-
-        .message.error {
-            background: #5d1818;
-            border-left: 4px solid #F44336;
-        }
-
-        .message.warning {
-            background: #5d4018;
-            border-left: 4px solid #FFC107;
-        }
-
-        /* Sound Files Styles */
-        .sound-list {
-            margin-bottom: 20px;
-        }
-
-        .sound-item {
-            background: #1a1a1a;
-            padding: 12px 15px;
-            border-radius: 6px;
-            margin-bottom: 8px;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-        }
-
-        .sound-name {
-            font-family: monospace;
-            color: #64B5F6;
-        }
-
-        .sound-size {
-            color: #888;
-            font-size: 0.875rem;
-        }
-
-        .file-upload {
-            background: #1a1a1a;
-            padding: 20px;
-            border-radius: 6px;
-            border: 2px dashed #444;
-        }
-
-        input[type="file"] {
-            display: block;
-            margin-bottom: 10px;
-            color: #e0e0e0;
-        }
-
-        /* Allowlist Styles */
-        .allowlist-toggle {
-            display: flex;
-            align-items: center;
-            gap: 15px;
-            margin-bottom: 20px;
-            padding: 15px;
-            background: #1a1a1a;
-            border-radius: 6px;
-        }
-
-        .toggle-switch {
-            position: relative;
-            display: inline-block;
-            width: 60px;
-            height: 34px;
-        }
-
-        .toggle-switch input {
-            opacity: 0;
-            width: 0;
-            height: 0;
-        }
-
-        .toggle-slider {
-            position: absolute;
-            cursor: pointer;
-            top: 0;
-            left: 0;
-            right: 0;
-            bottom: 0;
-            background-color: #555;
-            transition: 0.4s;
-            border-radius: 34px;
-        }
-
-        .toggle-slider:before {
-            position: absolute;
-            content: "";
-            height: 26px;
-            width: 26px;
-            left: 4px;
-            bottom: 4px;
-            background-color: white;
-            transition: 0.4s;
-            border-radius: 50%;
-        }
-
-        .toggle-switch input:checked + .toggle-slider {
-            background-color: #4CAF50;
-        }
-
-        .toggle-switch input:checked + .toggle-slider:before {
-            transform: translateX(26px);
-        }
-
-        .allowlist-entries {
-            margin-top: 20px;
-        }
-
-        .allowlist-entry {
-            display: flex;
-            align-items: center;
-            gap: 10px;
-            background: #1a1a1a;
-            padding: 12px 15px;
-            border-radius: 6px;
-            margin-bottom: 8px;
-        }
-
-        .allowlist-entry input {
-            flex: 1;
-            background: #2a2a2a;
-            border: 1px solid #444;
-            color: #e0e0e0;
-            padding: 8px 12px;
-            border-radius: 4px;
-            font-family: monospace;
-            font-size: 14px;
-        }
-
-        .allowlist-entry input:focus {
-            outline: none;
-            border-color: #4CAF50;
-        }
-
-        .btn-remove {
-            background: #F44336;
-            padding: 8px 12px;
-            font-size: 0.875rem;
-        }
-
-        .btn-remove:hover {
-            background: #d32f2f;
-        }
-
-        .btn-add {
-            background: #2196F3;
-            margin-top: 10px;
-        }
-
-        .btn-add:hover {
-            background: #1976D2;
-        }
-
-        .allowlist-actions {
-            margin-top: 20px;
-            display: flex;
-            gap: 10px;
-            align-items: center;
-        }
-
-        .allowlist-disabled-msg {
-            color: #888;
-            font-style: italic;
-            padding: 20px;
-            text-align: center;
-        }
-
-        /* Call Log Styles */
-        .call-log-filters {
-            display: flex;
-            gap: 15px;
-            margin-bottom: 20px;
-            flex-wrap: wrap;
-            align-items: center;
-        }
-
-        .call-log-filters input,
-        .call-log-filters select {
-            background: #1a1a1a;
-            border: 1px solid #444;
-            color: #e0e0e0;
-            padding: 10px 15px;
-            border-radius: 6px;
-            font-size: 14px;
-        }
-
-        .call-log-filters input:focus,
-        .call-log-filters select:focus {
-            outline: none;
-            border-color: #4CAF50;
-        }
-
-        .call-log-filters input[type="text"] {
-            min-width: 200px;
-        }
-
-        .call-log-table {
-            width: 100%;
-            border-collapse: collapse;
-            margin-top: 15px;
-        }
-
-        .call-log-table th,
-        .call-log-table td {
-            padding: 12px 15px;
-            text-align: left;
-            border-bottom: 1px solid #333;
-        }
-
-        .call-log-table th {
-            background: #1a1a1a;
-            color: #888;
-            font-weight: 600;
-            font-size: 0.875rem;
-            text-transform: uppercase;
-        }
-
-        .call-log-table tr:hover {
-            background: #333;
-            cursor: pointer;
-        }
-
-        .call-log-table td {
-            font-size: 0.9rem;
-        }
-
-        .direction-icon {
-            display: inline-block;
-            width: 20px;
-            text-align: center;
-        }
-
-        .direction-inbound { color: #2196F3; }
-        .direction-outbound { color: #4CAF50; }
-
-        .status-badge {
-            display: inline-block;
-            padding: 4px 10px;
-            border-radius: 12px;
-            font-size: 0.75rem;
-            font-weight: 600;
-            text-transform: uppercase;
-        }
-
-        .status-completed { background: #1b5e20; color: #81c784; }
-        .status-missed { background: #e65100; color: #ffb74d; }
-        .status-failed { background: #b71c1c; color: #ef9a9a; }
-        .status-rejected { background: #4a148c; color: #ce93d8; }
-
-        .call-log-empty {
-            text-align: center;
-            padding: 40px;
-            color: #888;
-        }
-
-        .pagination {
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            gap: 15px;
-            margin-top: 20px;
-        }
-
-        .pagination button {
-            padding: 8px 16px;
-            font-size: 0.875rem;
-        }
-
-        .pagination-info {
-            color: #888;
-            font-size: 0.875rem;
-        }
-
-        /* Call Stats Widget */
-        .stats-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
-            gap: 15px;
-            margin-bottom: 20px;
-        }
-
-        .stat-item {
-            background: #1a1a1a;
-            padding: 15px;
-            border-radius: 6px;
-            text-align: center;
-        }
-
-        .stat-value {
-            font-size: 1.75rem;
-            font-weight: 700;
-            color: #4CAF50;
-        }
-
-        .stat-label {
-            font-size: 0.75rem;
-            color: #888;
-            text-transform: uppercase;
-            margin-top: 5px;
-        }
-
-        /* Modal Styles */
-        .modal-overlay {
-            display: none;
-            position: fixed;
-            top: 0;
-            left: 0;
-            right: 0;
-            bottom: 0;
-            background: rgba(0, 0, 0, 0.7);
-            z-index: 1000;
-            justify-content: center;
-            align-items: center;
-        }
-
-        .modal-overlay.active {
-            display: flex;
-        }
-
-        .modal {
-            background: #2a2a2a;
-            border-radius: 8px;
-            padding: 25px;
-            max-width: 500px;
-            width: 90%;
-            max-height: 80vh;
-            overflow-y: auto;
-            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
-        }
-
-        .modal-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 20px;
-        }
-
-        .modal-header h3 {
-            color: #64B5F6;
-            font-size: 1.25rem;
-        }
-
-        .modal-close {
-            background: none;
-            border: none;
-            color: #888;
-            font-size: 1.5rem;
-            cursor: pointer;
-            padding: 0;
-            line-height: 1;
-        }
-
-        .modal-close:hover {
-            color: #fff;
-            background: none;
-        }
-
-        .call-detail-row {
-            display: flex;
-            justify-content: space-between;
-            padding: 10px 0;
-            border-bottom: 1px solid #333;
-        }
-
-        .call-detail-label {
-            color: #888;
-        }
-
-        .call-detail-value {
-            color: #fff;
-            font-family: monospace;
-        }
-
-        .modal-actions {
-            margin-top: 20px;
-            display: flex;
-            gap: 10px;
-            justify-content: flex-end;
-        }
-
-        .btn-danger {
-            background: #F44336;
-        }
-
-        .btn-danger:hover {
-            background: #d32f2f;
-        }
-
-        .btn-secondary {
-            background: #555;
-        }
-
-        .btn-secondary:hover {
-            background: #666;
-        }
-    </style>
+    <title>Rotary Phone</title>
+    <link rel="stylesheet" href="/static/styles.css">
 </head>
 <body>
-    <div class="container">
-        <h1>📞 Rotary Phone Admin</h1>
+    <div class="app">
+        <!-- Sidebar -->
+        <nav class="sidebar">
+            <div class="sidebar-header">
+                <a href="#" class="logo">
+                    <div class="logo-icon">&#9742;</div>
+                    <span class="logo-text">Rotary Phone</span>
+                </a>
+            </div>
 
-        <div class="tabs">
-            <button class="tab active" onclick="showTab('dashboard')">Dashboard</button>
-            <button class="tab" onclick="showTab('calls')">Call Log</button>
-            <button class="tab" onclick="showTab('allowlist')">Allowlist</button>
-            <button class="tab" onclick="showTab('config')">Config Editor</button>
-            <button class="tab" onclick="showTab('sounds')">Sound Files</button>
-        </div>
+            <div class="sidebar-nav">
+                <a class="nav-item active" onclick="showPage('dashboard')">
+                    <span class="nav-icon">&#9678;</span>
+                    <span class="nav-text">Dashboard</span>
+                </a>
+                <a class="nav-item" onclick="showPage('calls')">
+                    <span class="nav-icon">&#128222;</span>
+                    <span class="nav-text">Call Log</span>
+                </a>
+                <a class="nav-item" onclick="showPage('settings')">
+                    <span class="nav-icon">&#9881;</span>
+                    <span class="nav-text">Settings</span>
+                </a>
+            </div>
 
-        <!-- Dashboard Tab -->
-        <div id="dashboard" class="tab-content active">
-            <div class="card">
-                <h2>Phone Status</h2>
-                <button onclick="loadStatus()">Refresh</button>
-                <div class="status-grid" style="margin-top: 20px;">
-                    <div class="status-item">
-                        <div class="status-label">State</div>
-                        <div class="status-value" id="phone-state">
-                            <span class="state-indicator state-idle"></span>
-                            Loading...
+            <div class="sidebar-footer">
+                <div class="connection-status">
+                    <span class="status-dot" id="connection-dot"></span>
+                    <span id="connection-text">Connected</span>
+                </div>
+            </div>
+        </nav>
+
+        <!-- Main Content -->
+        <main class="main">
+            <!-- Dashboard Page -->
+            <div id="page-dashboard" class="page active">
+                <div class="page-header">
+                    <h1 class="page-title">Dashboard</h1>
+                    <p class="page-subtitle">Monitor your rotary phone status and recent activity</p>
+                </div>
+
+                <!-- Phone Status Hero -->
+                <div class="status-hero">
+                    <div class="phone-visual state-idle" id="phone-visual">&#9742;</div>
+                    <div class="status-info">
+                        <div class="status-state" id="status-state">Idle</div>
+                        <div class="status-detail" id="status-detail">Phone is on hook, ready for calls</div>
+                        <div class="status-number" id="status-number" style="display: none;"></div>
+                        <div class="status-error" id="status-error" style="display: none;"></div>
+                    </div>
+                </div>
+
+                <!-- Stats -->
+                <div class="card">
+                    <div class="card-header">
+                        <div>
+                            <div class="card-title">Call Statistics</div>
+                            <div class="card-subtitle">Last 7 days</div>
                         </div>
                     </div>
-                    <div class="status-item">
-                        <div class="status-label">Dialed Number</div>
-                        <div class="status-value" id="dialed-number">—</div>
-                    </div>
-                    <div class="status-item">
-                        <div class="status-label">Error Message</div>
-                        <div class="status-value" id="error-message" style="color: #F44336;">—</div>
+                    <div class="stats-grid">
+                        <div class="stat-card">
+                            <div class="stat-value" id="dash-stat-total">-</div>
+                            <div class="stat-label">Total</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-value green" id="dash-stat-completed">-</div>
+                            <div class="stat-label">Completed</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-value amber" id="dash-stat-missed">-</div>
+                            <div class="stat-label">Missed</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-value red" id="dash-stat-failed">-</div>
+                            <div class="stat-label">Failed</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-value" id="dash-stat-duration">-</div>
+                            <div class="stat-label">Avg Duration</div>
+                        </div>
                     </div>
                 </div>
-                <div class="last-updated" id="last-updated">Last updated: Never</div>
+
+                <!-- Recent Calls -->
+                <div class="card">
+                    <div class="card-header">
+                        <div class="card-title">Recent Calls</div>
+                        <button class="btn btn-secondary btn-sm" onclick="showPage('calls')">View All</button>
+                    </div>
+                    <div class="table-container">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>Time</th>
+                                    <th>Direction</th>
+                                    <th>Number</th>
+                                    <th>Duration</th>
+                                    <th>Status</th>
+                                </tr>
+                            </thead>
+                            <tbody id="recent-calls-body">
+                                <tr><td colspan="5" class="table-empty">Loading...</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
             </div>
 
-            <div class="card">
-                <h2>Configuration</h2>
-                <div id="config-display">Loading...</div>
-            </div>
-        </div>
-
-        <!-- Call Log Tab -->
-        <div id="calls" class="tab-content">
-            <div class="card">
-                <h2>Call Statistics (Last 7 Days)</h2>
-                <div class="stats-grid" id="call-stats">
-                    <div class="stat-item">
-                        <div class="stat-value" id="stat-total">-</div>
-                        <div class="stat-label">Total Calls</div>
-                    </div>
-                    <div class="stat-item">
-                        <div class="stat-value" id="stat-completed" style="color: #81c784;">-</div>
-                        <div class="stat-label">Completed</div>
-                    </div>
-                    <div class="stat-item">
-                        <div class="stat-value" id="stat-missed" style="color: #ffb74d;">-</div>
-                        <div class="stat-label">Missed</div>
-                    </div>
-                    <div class="stat-item">
-                        <div class="stat-value" id="stat-failed" style="color: #ef9a9a;">-</div>
-                        <div class="stat-label">Failed</div>
-                    </div>
-                    <div class="stat-item">
-                        <div class="stat-value" id="stat-duration">-</div>
-                        <div class="stat-label">Avg Duration</div>
-                    </div>
-                </div>
-            </div>
-
-            <div class="card">
-                <h2>Call History</h2>
-                <div id="call-log-message"></div>
-
-                <div class="call-log-filters">
-                    <input type="text" id="call-search" placeholder="Search phone number..."
-                           onkeyup="debounceSearch()">
-                    <select id="call-direction" onchange="loadCallLog()">
-                        <option value="">All Directions</option>
-                        <option value="inbound">Inbound</option>
-                        <option value="outbound">Outbound</option>
-                    </select>
-                    <select id="call-status" onchange="loadCallLog()">
-                        <option value="">All Statuses</option>
-                        <option value="completed">Completed</option>
-                        <option value="missed">Missed</option>
-                        <option value="failed">Failed</option>
-                        <option value="rejected">Rejected</option>
-                    </select>
-                    <button onclick="loadCallLog()">Refresh</button>
+            <!-- Call Log Page -->
+            <div id="page-calls" class="page">
+                <div class="page-header">
+                    <h1 class="page-title">Call Log</h1>
+                    <p class="page-subtitle">View and search your call history</p>
                 </div>
 
-                <div id="call-log-container">
-                    <table class="call-log-table">
-                        <thead>
-                            <tr>
-                                <th>Date/Time</th>
-                                <th>Dir</th>
-                                <th>Number</th>
-                                <th>Duration</th>
-                                <th>Status</th>
-                            </tr>
-                        </thead>
-                        <tbody id="call-log-body">
-                            <tr><td colspan="5" class="call-log-empty">Loading...</td></tr>
-                        </tbody>
-                    </table>
-                </div>
+                <div id="calls-message"></div>
 
-                <div class="pagination" id="call-pagination">
-                    <button id="prev-page" onclick="prevPage()" disabled>Previous</button>
-                    <span class="pagination-info" id="page-info">Page 1</span>
-                    <button id="next-page" onclick="nextPage()" disabled>Next</button>
+                <div class="card">
+                    <div class="filters">
+                        <input type="text" class="filter-input" id="call-search"
+                               placeholder="Search phone number..." onkeyup="debounceSearch()">
+                        <select class="filter-select" id="call-direction" onchange="loadCallLog()">
+                            <option value="">All Directions</option>
+                            <option value="inbound">Inbound</option>
+                            <option value="outbound">Outbound</option>
+                        </select>
+                        <select class="filter-select" id="call-status" onchange="loadCallLog()">
+                            <option value="">All Statuses</option>
+                            <option value="completed">Completed</option>
+                            <option value="missed">Missed</option>
+                            <option value="failed">Failed</option>
+                            <option value="rejected">Rejected</option>
+                        </select>
+                        <button class="btn btn-secondary" onclick="loadCallLog()">&#8635; Refresh</button>
+                    </div>
+
+                    <div class="table-container">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>Date & Time</th>
+                                    <th>Direction</th>
+                                    <th>Number</th>
+                                    <th>Duration</th>
+                                    <th>Status</th>
+                                </tr>
+                            </thead>
+                            <tbody id="call-log-body">
+                                <tr><td colspan="5" class="table-empty">Loading...</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+
+                    <div class="pagination">
+                        <button class="btn btn-secondary btn-sm" id="prev-page" onclick="prevPage()" disabled>Previous</button>
+                        <span class="pagination-info" id="page-info">Page 1</span>
+                        <button class="btn btn-secondary btn-sm" id="next-page" onclick="nextPage()" disabled>Next</button>
+                    </div>
                 </div>
             </div>
-        </div>
 
-        <!-- Call Details Modal -->
-        <div class="modal-overlay" id="call-modal" onclick="closeCallModal(event)">
-            <div class="modal" onclick="event.stopPropagation()">
-                <div class="modal-header">
-                    <h3>Call Details</h3>
-                    <button class="modal-close" onclick="closeCallModal()">&times;</button>
-                </div>
-                <div id="call-modal-content">
-                    <!-- Populated dynamically -->
-                </div>
-                <div class="modal-actions">
-                    <button class="btn-danger" onclick="deleteCall()">Delete Call</button>
-                    <button class="btn-secondary" onclick="closeCallModal()">Close</button>
-                </div>
-            </div>
-        </div>
-
-        <!-- Allowlist Tab -->
-        <div id="allowlist" class="tab-content">
-            <div class="card">
-                <h2>Number Allowlist</h2>
-                <p style="color: #888; margin-bottom: 15px;">
-                    Control which phone numbers can be dialed from this phone.
-                </p>
-                <div id="allowlist-message"></div>
-
-                <div class="allowlist-toggle">
-                    <label class="toggle-switch">
-                        <input type="checkbox" id="allow-all-toggle" onchange="toggleAllowAll()">
-                        <span class="toggle-slider"></span>
-                    </label>
-                    <span id="allow-all-label">Allow All Numbers</span>
+            <!-- Settings Page -->
+            <div id="page-settings" class="page">
+                <div class="page-header">
+                    <h1 class="page-title">Settings</h1>
+                    <p class="page-subtitle">Configure your rotary phone</p>
                 </div>
 
-                <div id="allowlist-entries-container">
-                    <h3 style="color: #64B5F6; margin-bottom: 10px;">Allowed Numbers</h3>
-                    <div id="allowlist-entries">
-                        Loading...
+                <div id="settings-message"></div>
+
+                <!-- Allowlist Section -->
+                <div class="settings-section" id="section-allowlist">
+                    <div class="settings-header" onclick="toggleSection('allowlist')">
+                        <div class="settings-header-left">
+                            <div class="settings-icon">&#128274;</div>
+                            <div>
+                                <div class="settings-title">Allowed Numbers</div>
+                                <div class="settings-description">Control which numbers can be dialed</div>
+                            </div>
+                        </div>
+                        <span class="settings-chevron">&#9660;</span>
                     </div>
-                    <button class="btn-add" onclick="addAllowlistEntry()">+ Add Number</button>
+                    <div class="settings-content">
+                        <div class="toggle-row">
+                            <div>
+                                <div class="toggle-label">Allow All Numbers</div>
+                                <div class="toggle-description">Disable restrictions and allow dialing any number</div>
+                            </div>
+                            <label class="toggle">
+                                <input type="checkbox" id="allow-all-toggle" onchange="toggleAllowAll()">
+                                <span class="toggle-slider"></span>
+                            </label>
+                        </div>
+
+                        <div id="allowlist-entries-container" style="margin-top: 20px;">
+                            <div class="form-label">Allowed Phone Numbers</div>
+                            <div id="allowlist-entries"></div>
+                            <button class="btn btn-secondary btn-sm" onclick="addAllowlistEntry()" style="margin-top: 12px;">
+                                + Add Number
+                            </button>
+                        </div>
+
+                        <div style="margin-top: 24px; display: flex; gap: 12px;">
+                            <button class="btn btn-primary" onclick="saveAllowlist()">Save Changes</button>
+                            <button class="btn btn-secondary" onclick="loadAllowlist()">Reset</button>
+                        </div>
+                    </div>
                 </div>
 
-                <div class="allowlist-actions">
-                    <button onclick="saveAllowlist()">Save Changes</button>
-                    <button onclick="loadAllowlist()" style="background: #555;">Reset</button>
-                    <span id="allowlist-status" style="color: #888; margin-left: 10px;"></span>
+                <!-- Speed Dial Section -->
+                <div class="settings-section" id="section-speeddial">
+                    <div class="settings-header" onclick="toggleSection('speeddial')">
+                        <div class="settings-header-left">
+                            <div class="settings-icon">&#9889;</div>
+                            <div>
+                                <div class="settings-title">Speed Dial</div>
+                                <div class="settings-description">Quick dial shortcuts (1-2 digit codes)</div>
+                            </div>
+                        </div>
+                        <span class="settings-chevron">&#9660;</span>
+                    </div>
+                    <div class="settings-content">
+                        <div id="speed-dial-entries"></div>
+                        <button class="btn btn-secondary btn-sm" onclick="addSpeedDialEntry()" style="margin-top: 12px;">
+                            + Add Speed Dial
+                        </button>
+                        <div style="margin-top: 24px; display: flex; gap: 12px;">
+                            <button class="btn btn-primary" onclick="saveSpeedDial()">Save Changes</button>
+                            <button class="btn btn-secondary" onclick="loadSpeedDial()">Reset</button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Sounds Section -->
+                <div class="settings-section" id="section-sounds">
+                    <div class="settings-header" onclick="toggleSection('sounds')">
+                        <div class="settings-header-left">
+                            <div class="settings-icon">&#128266;</div>
+                            <div>
+                                <div class="settings-title">Sounds & Ring Settings</div>
+                                <div class="settings-description">Manage ringtones, audio files, and ring timing</div>
+                            </div>
+                        </div>
+                        <span class="settings-chevron">&#9660;</span>
+                    </div>
+                    <div class="settings-content">
+                        <!-- Ring Settings -->
+                        <div class="form-label">Ring Settings</div>
+                        <div class="ring-settings-grid">
+                            <div class="ring-setting-row">
+                                <div class="ring-setting-info">
+                                    <label for="ring-duration">Ring Duration</label>
+                                    <span class="ring-setting-hint">How long the ring sound plays (seconds)</span>
+                                </div>
+                                <div class="ring-setting-control">
+                                    <input type="number" id="ring-duration" min="0.5" max="30" step="0.5" value="2">
+                                    <span class="ring-setting-unit">s</span>
+                                </div>
+                            </div>
+                            <div class="ring-setting-row">
+                                <div class="ring-setting-info">
+                                    <label for="ring-pause">Ring Pause</label>
+                                    <span class="ring-setting-hint">Silence between rings (seconds)</span>
+                                </div>
+                                <div class="ring-setting-control">
+                                    <input type="number" id="ring-pause" min="0.5" max="60" step="0.5" value="4">
+                                    <span class="ring-setting-unit">s</span>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="ring-settings-actions">
+                            <button class="btn btn-primary btn-sm" onclick="saveRingSettings()">Save Ring Settings</button>
+                            <button class="btn btn-secondary btn-sm" onclick="testRing()">&#9654; Test Ring</button>
+                        </div>
+
+                        <div style="margin-top: 32px;">
+                            <div class="form-label">Audio Levels</div>
+                            <div class="ring-settings-grid">
+                                <div class="ring-setting-row">
+                                    <div class="ring-setting-info">
+                                        <label for="input-gain">Microphone Gain</label>
+                                        <span class="ring-setting-hint">Input volume from handset mic (0.0-2.0)</span>
+                                    </div>
+                                    <div class="ring-setting-control">
+                                        <input type="range" id="input-gain-slider" min="0" max="2" step="0.1" value="1"
+                                               oninput="document.getElementById('input-gain').value = this.value">
+                                        <input type="number" id="input-gain" min="0" max="2" step="0.1" value="1"
+                                               oninput="document.getElementById('input-gain-slider').value = this.value">
+                                    </div>
+                                </div>
+                                <div class="ring-setting-row">
+                                    <div class="ring-setting-info">
+                                        <label for="output-volume">Speaker Volume</label>
+                                        <span class="ring-setting-hint">Output volume to handset speaker (0.0-2.0)</span>
+                                    </div>
+                                    <div class="ring-setting-control">
+                                        <input type="range" id="output-volume-slider" min="0" max="2" step="0.1" value="1"
+                                               oninput="document.getElementById('output-volume').value = this.value">
+                                        <input type="number" id="output-volume" min="0" max="2" step="0.1" value="1"
+                                               oninput="document.getElementById('output-volume-slider').value = this.value">
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="ring-settings-actions">
+                                <button class="btn btn-primary btn-sm" onclick="saveAudioGain()">Save Audio Levels</button>
+                            </div>
+                        </div>
+
+                        <div style="margin-top: 32px;">
+                            <!-- Sound Assignments -->
+                            <div class="form-label">Sound Assignments</div>
+                            <div class="sound-assignments">
+                                <div class="assignment-row">
+                                    <label>Ring Sound</label>
+                                    <select id="assign-ring_sound" onchange="saveSoundAssignments()">
+                                        <option value="">-- None --</option>
+                                    </select>
+                                </div>
+                                <div class="assignment-row">
+                                    <label>Dial Tone</label>
+                                    <select id="assign-dial_tone" onchange="saveSoundAssignments()">
+                                        <option value="">-- None --</option>
+                                    </select>
+                                </div>
+                                <div class="assignment-row">
+                                    <label>Busy Tone</label>
+                                    <select id="assign-busy_tone" onchange="saveSoundAssignments()">
+                                        <option value="">-- None --</option>
+                                    </select>
+                                </div>
+                                <div class="assignment-row">
+                                    <label>Error Tone</label>
+                                    <select id="assign-error_tone" onchange="saveSoundAssignments()">
+                                        <option value="">-- None --</option>
+                                    </select>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div style="margin-top: 24px;">
+                            <div class="form-label">Sound Files</div>
+                            <div id="sound-list"></div>
+                        </div>
+
+                        <!-- Hidden audio element for playback -->
+                        <audio id="sound-player" style="display: none;"></audio>
+
+                        <div style="margin-top: 24px;">
+                            <div class="form-label">Upload New Sound</div>
+                            <label class="upload-zone">
+                                <input type="file" id="sound-file" accept=".wav" onchange="uploadSound()">
+                                <div class="upload-icon">&#128190;</div>
+                                <div class="upload-text">Click to upload WAV file</div>
+                                <div class="upload-hint">Only .wav files are supported</div>
+                            </label>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- System Info Section -->
+                <div class="settings-section" id="section-system">
+                    <div class="settings-header" onclick="toggleSection('system')">
+                        <div class="settings-header-left">
+                            <div class="settings-icon">&#128296;</div>
+                            <div>
+                                <div class="settings-title">System Information</div>
+                                <div class="settings-description">View current configuration (read-only)</div>
+                            </div>
+                        </div>
+                        <span class="settings-chevron">&#9660;</span>
+                    </div>
+                    <div class="settings-content">
+                        <div class="config-grid" id="system-config"></div>
+                    </div>
                 </div>
             </div>
-        </div>
+        </main>
+    </div>
 
-        <!-- Config Editor Tab -->
-        <div id="config" class="tab-content">
-            <div class="card">
-                <h2>Edit Configuration</h2>
-                <div id="config-message"></div>
-                <p style="color: #888; margin-bottom: 15px;">
-                    ⚠️ Changes require application restart to take effect. Edit the YAML configuration below.
-                </p>
-                <textarea id="config-editor" spellcheck="false"></textarea>
-                <div class="editor-actions">
-                    <button onclick="saveConfig()">Save Configuration</button>
-                    <button onclick="loadConfigEditor()">Reload from File</button>
-                    <span id="config-status" style="color: #888; margin-left: 10px;"></span>
-                </div>
+    <!-- Call Details Modal -->
+    <div class="modal-overlay" id="call-modal" onclick="closeCallModal(event)">
+        <div class="modal" onclick="event.stopPropagation()">
+            <div class="modal-header">
+                <h3 class="modal-title">Call Details</h3>
+                <button class="modal-close" onclick="closeCallModal()">&times;</button>
             </div>
-        </div>
-
-        <!-- Sound Files Tab -->
-        <div id="sounds" class="tab-content">
-            <div class="card">
-                <h2>Sound Files</h2>
-                <div id="sound-message"></div>
-                <div class="sound-list" id="sound-list">
-                    Loading...
-                </div>
-                <h3 style="color: #64B5F6; margin-top: 20px; margin-bottom: 10px;">Upload New Sound</h3>
-                <div class="file-upload">
-                    <input type="file" id="sound-file" accept=".wav">
-                    <button onclick="uploadSound()">Upload WAV File</button>
-                </div>
+            <div class="modal-body" id="call-modal-content"></div>
+            <div class="modal-footer">
+                <button class="btn btn-danger" onclick="deleteCall()">Delete</button>
+                <button class="btn btn-secondary" onclick="closeCallModal()">Close</button>
             </div>
         </div>
     </div>
 
-    <script>
-        let currentTab = 'dashboard';
-
-        function showTab(tabName) {
-            // Hide all tabs
-            document.querySelectorAll('.tab-content').forEach(tab => {
-                tab.classList.remove('active');
-            });
-            document.querySelectorAll('.tab').forEach(tab => {
-                tab.classList.remove('active');
-            });
-
-            // Show selected tab
-            document.getElementById(tabName).classList.add('active');
-            event.target.classList.add('active');
-            currentTab = tabName;
-
-            // Load tab-specific content
-            if (tabName === 'config') {
-                loadConfigEditor();
-            } else if (tabName === 'sounds') {
-                loadSoundFiles();
-            } else if (tabName === 'allowlist') {
-                loadAllowlist();
-            } else if (tabName === 'calls') {
-                callLogState.currentPage = 0;
-                loadCallLog();
-                loadCallStats();
-            }
-        }
-
-        async function loadStatus() {
-            try {
-                const response = await fetch('/api/status');
-                const data = await response.json();
-
-                // Update phone state
-                const stateElement = document.getElementById('phone-state');
-                const state = data.phone.state;
-                stateElement.innerHTML = `<span class="state-indicator state-${state.toLowerCase()}"></span>${formatState(state)}`;
-
-                // Update dialed number
-                document.getElementById('dialed-number').textContent = data.phone.dialed_number || '—';
-
-                // Update error message
-                const errorMsg = data.phone.error_message || '—';
-                document.getElementById('error-message').textContent = errorMsg;
-                document.getElementById('error-message').style.color = errorMsg === '—' ? '#666' : '#F44336';
-
-                // Update last updated time
-                document.getElementById('last-updated').textContent = `Last updated: ${new Date().toLocaleTimeString()}`;
-            } catch (error) {
-                console.error('Error loading status:', error);
-            }
-        }
-
-        async function loadConfig() {
-            try {
-                const response = await fetch('/api/config');
-                const config = await response.json();
-
-                const configDisplay = document.getElementById('config-display');
-                configDisplay.innerHTML = '';
-
-                // Display key config items
-                const items = [
-                    { label: 'SIP Server', value: config.sip?.server || 'Not configured' },
-                    { label: 'SIP Username', value: config.sip?.username || 'Not configured' },
-                    { label: 'SIP Port', value: config.sip?.port || '5060' },
-                ];
-
-                items.forEach(item => {
-                    const div = document.createElement('div');
-                    div.className = 'config-item';
-                    div.innerHTML = `
-                        <span class="config-label">${item.label}:</span>
-                        <span class="config-value">${item.value}</span>
-                    `;
-                    configDisplay.appendChild(div);
-                });
-            } catch (error) {
-                console.error('Error loading config:', error);
-            }
-        }
-
-        async function loadConfigEditor() {
-            const editor = document.getElementById('config-editor');
-            const status = document.getElementById('config-status');
-
-            try {
-                status.textContent = 'Loading...';
-                const response = await fetch('/api/config/raw');
-                const text = await response.text();
-                editor.value = text;
-                status.textContent = 'Loaded';
-                setTimeout(() => status.textContent = '', 2000);
-            } catch (error) {
-                showMessage('config-message', 'error', `Failed to load config: ${error.message}`);
-            }
-        }
-
-        async function saveConfig() {
-            const editor = document.getElementById('config-editor');
-            const status = document.getElementById('config-status');
-
-            try {
-                status.textContent = 'Saving...';
-                const response = await fetch('/api/config', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'text/plain',
-                    },
-                    body: editor.value
-                });
-
-                const result = await response.json();
-
-                if (response.ok) {
-                    showMessage('config-message', 'success', result.message);
-                    status.textContent = 'Saved';
-                } else {
-                    showMessage('config-message', 'error', result.detail || 'Failed to save');
-                    status.textContent = 'Error';
-                }
-
-                setTimeout(() => status.textContent = '', 3000);
-            } catch (error) {
-                showMessage('config-message', 'error', `Failed to save config: ${error.message}`);
-                status.textContent = 'Error';
-            }
-        }
-
-        async function loadSoundFiles() {
-            const soundList = document.getElementById('sound-list');
-
-            try {
-                const response = await fetch('/api/sounds');
-                const data = await response.json();
-
-                if (data.files.length === 0) {
-                    soundList.innerHTML = '<p style="color: #888;">No sound files found. Upload some WAV files!</p>';
-                    return;
-                }
-
-                soundList.innerHTML = '';
-                data.files.forEach(file => {
-                    const div = document.createElement('div');
-                    div.className = 'sound-item';
-                    div.innerHTML = `
-                        <span class="sound-name">${file.name}</span>
-                        <span class="sound-size">${formatBytes(file.size)}</span>
-                    `;
-                    soundList.appendChild(div);
-                });
-            } catch (error) {
-                soundList.innerHTML = `<p style="color: #F44336;">Error loading sound files: ${error.message}</p>`;
-            }
-        }
-
-        async function uploadSound() {
-            const fileInput = document.getElementById('sound-file');
-            const file = fileInput.files[0];
-
-            if (!file) {
-                showMessage('sound-message', 'warning', 'Please select a file first');
-                return;
-            }
-
-            const formData = new FormData();
-            formData.append('file', file);
-
-            try {
-                const response = await fetch('/api/sounds/upload', {
-                    method: 'POST',
-                    body: formData
-                });
-
-                const result = await response.json();
-
-                if (response.ok) {
-                    showMessage('sound-message', 'success', result.message);
-                    fileInput.value = '';
-                    loadSoundFiles();
-                } else {
-                    showMessage('sound-message', 'error', result.detail || 'Upload failed');
-                }
-            } catch (error) {
-                showMessage('sound-message', 'error', `Upload failed: ${error.message}`);
-            }
-        }
-
-        function showMessage(elementId, type, message) {
-            const messageDiv = document.getElementById(elementId);
-            messageDiv.innerHTML = `<div class="message ${type}">${message}</div>`;
-            setTimeout(() => messageDiv.innerHTML = '', 5000);
-        }
-
-        function formatState(state) {
-            return state.split('_').map(word =>
-                word.charAt(0).toUpperCase() + word.slice(1).toLowerCase()
-            ).join(' ');
-        }
-
-        function formatBytes(bytes) {
-            if (bytes === 0) return '0 Bytes';
-            const k = 1024;
-            const sizes = ['Bytes', 'KB', 'MB'];
-            const i = Math.floor(Math.log(bytes) / Math.log(k));
-            return Math.round(bytes / Math.pow(k, i) * 100) / 100 + ' ' + sizes[i];
-        }
-
-        // -------------------------------------------------------------------------
-        // Allowlist Functions
-        // -------------------------------------------------------------------------
-
-        let allowlistData = { allowlist: [], allow_all: false };
-
-        async function loadAllowlist() {
-            const entriesDiv = document.getElementById('allowlist-entries');
-            const toggle = document.getElementById('allow-all-toggle');
-            const container = document.getElementById('allowlist-entries-container');
-
-            try {
-                const response = await fetch('/api/allowlist');
-                allowlistData = await response.json();
-
-                toggle.checked = allowlistData.allow_all;
-                updateAllowlistUI();
-            } catch (error) {
-                entriesDiv.innerHTML = `<p style="color: #F44336;">Error loading allowlist: ${error.message}</p>`;
-            }
-        }
-
-        function updateAllowlistUI() {
-            const entriesDiv = document.getElementById('allowlist-entries');
-            const container = document.getElementById('allowlist-entries-container');
-            const toggle = document.getElementById('allow-all-toggle');
-
-            if (toggle.checked) {
-                container.style.display = 'none';
-                return;
-            }
-
-            container.style.display = 'block';
-
-            // Filter out the "*" entry for display
-            const entries = allowlistData.allowlist.filter(e => e !== '*');
-
-            if (entries.length === 0) {
-                entriesDiv.innerHTML = '<p class="allowlist-disabled-msg">No numbers in allowlist. Add numbers below or enable "Allow All".</p>';
-                return;
-            }
-
-            entriesDiv.innerHTML = '';
-            entries.forEach((entry, index) => {
-                const div = document.createElement('div');
-                div.className = 'allowlist-entry';
-                div.innerHTML = `
-                    <input type="text" value="${escapeHtml(entry)}"
-                           onchange="updateAllowlistEntry(${index}, this.value)"
-                           placeholder="+12065551234">
-                    <button class="btn-remove" onclick="removeAllowlistEntry(${index})">Remove</button>
-                `;
-                entriesDiv.appendChild(div);
-            });
-        }
-
-        function toggleAllowAll() {
-            const toggle = document.getElementById('allow-all-toggle');
-            allowlistData.allow_all = toggle.checked;
-
-            if (toggle.checked) {
-                // Store existing entries but set allowlist to ["*"]
-                allowlistData._savedEntries = allowlistData.allowlist.filter(e => e !== '*');
-                allowlistData.allowlist = ['*'];
-            } else {
-                // Restore saved entries or start with empty list
-                allowlistData.allowlist = allowlistData._savedEntries || [];
-            }
-
-            updateAllowlistUI();
-        }
-
-        function addAllowlistEntry() {
-            // Filter out "*" and add empty entry
-            const entries = allowlistData.allowlist.filter(e => e !== '*');
-            entries.push('');
-            allowlistData.allowlist = entries;
-            updateAllowlistUI();
-
-            // Focus the new input
-            setTimeout(() => {
-                const inputs = document.querySelectorAll('#allowlist-entries input');
-                if (inputs.length > 0) {
-                    inputs[inputs.length - 1].focus();
-                }
-            }, 50);
-        }
-
-        function updateAllowlistEntry(index, value) {
-            const entries = allowlistData.allowlist.filter(e => e !== '*');
-            entries[index] = value;
-            allowlistData.allowlist = entries;
-        }
-
-        function removeAllowlistEntry(index) {
-            const entries = allowlistData.allowlist.filter(e => e !== '*');
-            entries.splice(index, 1);
-            allowlistData.allowlist = entries;
-            updateAllowlistUI();
-        }
-
-        async function saveAllowlist() {
-            const status = document.getElementById('allowlist-status');
-
-            // Build the allowlist to save
-            let toSave;
-            if (allowlistData.allow_all) {
-                toSave = ['*'];
-            } else {
-                // Filter out empty entries and "*"
-                toSave = allowlistData.allowlist
-                    .filter(e => e && e !== '*')
-                    .map(e => e.trim())
-                    .filter(e => e.length > 0);
-            }
-
-            try {
-                status.textContent = 'Saving...';
-                const response = await fetch('/api/allowlist', {
-                    method: 'PUT',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
-                    body: JSON.stringify({ allowlist: toSave })
-                });
-
-                const result = await response.json();
-
-                if (response.ok) {
-                    showMessage('allowlist-message', 'success', result.message);
-                    status.textContent = 'Saved';
-                    // Reload to get clean state
-                    await loadAllowlist();
-                } else {
-                    showMessage('allowlist-message', 'error', result.detail || 'Failed to save');
-                    status.textContent = 'Error';
-                }
-
-                setTimeout(() => status.textContent = '', 3000);
-            } catch (error) {
-                showMessage('allowlist-message', 'error', `Failed to save: ${error.message}`);
-                status.textContent = 'Error';
-            }
-        }
-
-        function escapeHtml(text) {
-            const div = document.createElement('div');
-            div.textContent = text;
-            return div.innerHTML;
-        }
-
-        // -------------------------------------------------------------------------
-        // Call Log Functions
-        // -------------------------------------------------------------------------
-
-        let callLogState = {
-            calls: [],
-            currentPage: 0,
-            pageSize: 20,
-            hasMore: false,
-            selectedCallId: null
-        };
-
-        let searchTimeout = null;
-
-        function debounceSearch() {
-            clearTimeout(searchTimeout);
-            searchTimeout = setTimeout(() => loadCallLog(), 300);
-        }
-
-        async function loadCallLog() {
-            const tbody = document.getElementById('call-log-body');
-            const search = document.getElementById('call-search').value;
-            const direction = document.getElementById('call-direction').value;
-            const status = document.getElementById('call-status').value;
-
-            const offset = callLogState.currentPage * callLogState.pageSize;
-
-            let url = `/api/calls?limit=${callLogState.pageSize}&offset=${offset}`;
-            if (search) url += `&search=${encodeURIComponent(search)}`;
-            if (direction) url += `&direction=${encodeURIComponent(direction)}`;
-            if (status) url += `&status=${encodeURIComponent(status)}`;
-
-            try {
-                const response = await fetch(url);
-
-                if (!response.ok) {
-                    const err = await response.json();
-                    throw new Error(err.detail || 'Failed to load calls');
-                }
-
-                const data = await response.json();
-                callLogState.calls = data.calls;
-                callLogState.hasMore = data.pagination.has_more;
-
-                renderCallLog();
-                updatePagination();
-            } catch (error) {
-                tbody.innerHTML = `<tr><td colspan="5" class="call-log-empty" style="color: #F44336;">
-                    Error: ${error.message}</td></tr>`;
-            }
-        }
-
-        function renderCallLog() {
-            const tbody = document.getElementById('call-log-body');
-
-            if (callLogState.calls.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="5" class="call-log-empty">No calls found</td></tr>';
-                return;
-            }
-
-            tbody.innerHTML = '';
-            callLogState.calls.forEach(call => {
-                const tr = document.createElement('tr');
-                tr.onclick = () => showCallDetails(call.id);
-
-                const dirIcon = call.direction === 'inbound'
-                    ? '<span class="direction-icon direction-inbound" title="Inbound">&#8595;</span>'
-                    : '<span class="direction-icon direction-outbound" title="Outbound">&#8593;</span>';
-
-                const number = call.direction === 'inbound'
-                    ? (call.caller_id || 'Unknown')
-                    : (call.destination || call.dialed_number || 'Unknown');
-
-                tr.innerHTML = `
-                    <td>${formatDateTime(call.timestamp)}</td>
-                    <td>${dirIcon}</td>
-                    <td style="font-family: monospace;">${escapeHtml(number)}</td>
-                    <td>${formatDuration(call.duration_seconds)}</td>
-                    <td><span class="status-badge status-${call.status}">${call.status}</span></td>
-                `;
-                tbody.appendChild(tr);
-            });
-        }
-
-        function updatePagination() {
-            const prevBtn = document.getElementById('prev-page');
-            const nextBtn = document.getElementById('next-page');
-            const pageInfo = document.getElementById('page-info');
-
-            prevBtn.disabled = callLogState.currentPage === 0;
-            nextBtn.disabled = !callLogState.hasMore;
-            pageInfo.textContent = `Page ${callLogState.currentPage + 1}`;
-        }
-
-        function prevPage() {
-            if (callLogState.currentPage > 0) {
-                callLogState.currentPage--;
-                loadCallLog();
-            }
-        }
-
-        function nextPage() {
-            if (callLogState.hasMore) {
-                callLogState.currentPage++;
-                loadCallLog();
-            }
-        }
-
-        async function loadCallStats() {
-            try {
-                const response = await fetch('/api/calls/stats?days=7');
-                if (!response.ok) {
-                    // Stats may not be available if database is not configured
-                    return;
-                }
-
-                const data = await response.json();
-                const stats = data.stats;
-
-                document.getElementById('stat-total').textContent = stats.total_calls || 0;
-                document.getElementById('stat-completed').textContent = stats.by_status?.completed || 0;
-                document.getElementById('stat-missed').textContent = stats.by_status?.missed || 0;
-                document.getElementById('stat-failed').textContent = stats.by_status?.failed || 0;
-                document.getElementById('stat-duration').textContent = formatDuration(stats.avg_duration_seconds || 0);
-            } catch (error) {
-                console.error('Error loading call stats:', error);
-            }
-        }
-
-        async function showCallDetails(callId) {
-            callLogState.selectedCallId = callId;
-
-            try {
-                const response = await fetch(`/api/calls/${callId}`);
-                if (!response.ok) {
-                    throw new Error('Call not found');
-                }
-
-                const data = await response.json();
-                const call = data.call;
-
-                const content = document.getElementById('call-modal-content');
-                content.innerHTML = `
-                    <div class="call-detail-row">
-                        <span class="call-detail-label">ID</span>
-                        <span class="call-detail-value">${call.id}</span>
-                    </div>
-                    <div class="call-detail-row">
-                        <span class="call-detail-label">Direction</span>
-                        <span class="call-detail-value">${call.direction}</span>
-                    </div>
-                    <div class="call-detail-row">
-                        <span class="call-detail-label">Status</span>
-                        <span class="call-detail-value">
-                            <span class="status-badge status-${call.status}">${call.status}</span>
-                        </span>
-                    </div>
-                    <div class="call-detail-row">
-                        <span class="call-detail-label">Started</span>
-                        <span class="call-detail-value">${formatDateTime(call.timestamp)}</span>
-                    </div>
-                    ${call.caller_id ? `
-                    <div class="call-detail-row">
-                        <span class="call-detail-label">Caller ID</span>
-                        <span class="call-detail-value">${escapeHtml(call.caller_id)}</span>
-                    </div>` : ''}
-                    ${call.dialed_number ? `
-                    <div class="call-detail-row">
-                        <span class="call-detail-label">Dialed Number</span>
-                        <span class="call-detail-value">${escapeHtml(call.dialed_number)}</span>
-                    </div>` : ''}
-                    ${call.destination ? `
-                    <div class="call-detail-row">
-                        <span class="call-detail-label">Destination</span>
-                        <span class="call-detail-value">${escapeHtml(call.destination)}</span>
-                    </div>` : ''}
-                    ${call.speed_dial_code ? `
-                    <div class="call-detail-row">
-                        <span class="call-detail-label">Speed Dial</span>
-                        <span class="call-detail-value">${escapeHtml(call.speed_dial_code)}</span>
-                    </div>` : ''}
-                    <div class="call-detail-row">
-                        <span class="call-detail-label">Duration</span>
-                        <span class="call-detail-value">${formatDuration(call.duration_seconds)}</span>
-                    </div>
-                    ${call.answered_at ? `
-                    <div class="call-detail-row">
-                        <span class="call-detail-label">Answered At</span>
-                        <span class="call-detail-value">${formatDateTime(call.answered_at)}</span>
-                    </div>` : ''}
-                    ${call.ended_at ? `
-                    <div class="call-detail-row">
-                        <span class="call-detail-label">Ended At</span>
-                        <span class="call-detail-value">${formatDateTime(call.ended_at)}</span>
-                    </div>` : ''}
-                    ${call.error_message ? `
-                    <div class="call-detail-row">
-                        <span class="call-detail-label">Error</span>
-                        <span class="call-detail-value" style="color: #F44336;">${escapeHtml(call.error_message)}</span>
-                    </div>` : ''}
-                `;
-
-                document.getElementById('call-modal').classList.add('active');
-            } catch (error) {
-                showMessage('call-log-message', 'error', `Failed to load call details: ${error.message}`);
-            }
-        }
-
-        function closeCallModal(event) {
-            if (event && event.target !== event.currentTarget) return;
-            document.getElementById('call-modal').classList.remove('active');
-            callLogState.selectedCallId = null;
-        }
-
-        async function deleteCall() {
-            if (!callLogState.selectedCallId) return;
-
-            if (!confirm('Are you sure you want to delete this call record?')) {
-                return;
-            }
-
-            try {
-                const response = await fetch(`/api/calls/${callLogState.selectedCallId}`, {
-                    method: 'DELETE'
-                });
-
-                if (!response.ok) {
-                    const err = await response.json();
-                    throw new Error(err.detail || 'Failed to delete call');
-                }
-
-                closeCallModal();
-                showMessage('call-log-message', 'success', 'Call deleted successfully');
-                loadCallLog();
-                loadCallStats();
-            } catch (error) {
-                showMessage('call-log-message', 'error', `Failed to delete call: ${error.message}`);
-            }
-        }
-
-        function formatDateTime(isoString) {
-            if (!isoString) return '-';
-            const date = new Date(isoString);
-            return date.toLocaleString();
-        }
-
-        function formatDuration(seconds) {
-            if (!seconds || seconds === 0) return '0:00';
-            const mins = Math.floor(seconds / 60);
-            const secs = Math.floor(seconds % 60);
-            return `${mins}:${secs.toString().padStart(2, '0')}`;
-        }
-
-        // Auto-refresh dashboard every 2 seconds
-        setInterval(() => {
-            if (currentTab === 'dashboard') {
-                loadStatus();
-            }
-        }, 2000);
-
-        // Initial load
-        loadStatus();
-        loadConfig();
-    </script>
+    <script src="/static/app.js"></script>
 </body>
 </html>

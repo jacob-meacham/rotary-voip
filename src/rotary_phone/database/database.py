@@ -155,7 +155,7 @@ class Database:
             )
             return [CallLog.from_row(row) for row in cursor.fetchall()]
 
-    def search_calls(  # pylint: disable=too-many-positional-arguments
+    def search_calls(  # pylint: disable=too-many-positional-arguments,too-many-arguments
         self,
         start_date: Optional[datetime] = None,
         end_date: Optional[datetime] = None,
@@ -163,6 +163,7 @@ class Database:
         status: Optional[str] = None,
         number_pattern: Optional[str] = None,
         limit: int = 100,
+        offset: int = 0,
     ) -> List[CallLog]:
         """Search calls with filters.
 
@@ -173,6 +174,7 @@ class Database:
             status: Filter by status ("completed", "missed", etc.)
             number_pattern: Filter by number (matches caller_id, dialed_number, or destination)
             limit: Maximum number of results
+            offset: Number of records to skip (for pagination)
 
         Returns:
             List of matching CallLog, newest first
@@ -205,8 +207,9 @@ class Database:
             pattern = f"%{number_pattern}%"
             params.extend([pattern, pattern, pattern])
 
-        query += " ORDER BY timestamp DESC LIMIT ?"
+        query += " ORDER BY timestamp DESC LIMIT ? OFFSET ?"
         params.append(limit)
+        params.append(offset)
 
         with self._connection() as conn:
             cursor = conn.execute(query, params)
@@ -315,3 +318,20 @@ class Database:
             cursor = conn.execute("SELECT COUNT(*) as count FROM call_logs")
             result = cursor.fetchone()
             return int(result["count"]) if result else 0
+
+    def delete_call(self, call_id: int) -> bool:
+        """Delete a call record by ID.
+
+        Args:
+            call_id: ID of the call record to delete
+
+        Returns:
+            True if a record was deleted, False if not found
+        """
+        with self._connection() as conn:
+            cursor = conn.execute("DELETE FROM call_logs WHERE id = ?", (call_id,))
+            conn.commit()
+            deleted = cursor.rowcount > 0
+            if deleted:
+                logger.debug("Deleted call log with id=%d", call_id)
+            return deleted
