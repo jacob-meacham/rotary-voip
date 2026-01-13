@@ -6,7 +6,7 @@ without requiring a real SIP server.
 
 import logging
 import threading
-from typing import Callable, Optional
+from typing import Any, Callable, Optional
 
 from rotary_phone.sip.sip_client import CallState, SIPClient
 
@@ -207,6 +207,17 @@ class InMemorySIPClient(SIPClient):
         # Trigger callback outside lock
         if self._on_call_ended:
             self._on_call_ended()
+
+    def get_current_call(self) -> Optional[Any]:
+        """Get the current call object for audio handling.
+
+        In-memory client does not have a real call object, so this
+        always returns None. Audio handling is not supported in mock mode.
+
+        Returns:
+            None (mock client has no real call object)
+        """
+        return None
 
     def simulate_incoming_call(self, caller_id: str) -> None:
         """Simulate an incoming call (for testing).

@@ -7,7 +7,8 @@ from fastapi.testclient import TestClient
 
 from rotary_phone.call_manager import CallManager, PhoneState
 from rotary_phone.config import ConfigManager
-from rotary_phone.web.app import create_app, _is_valid_phone_pattern
+from rotary_phone.web.app import create_app
+from rotary_phone.web.models import _is_valid_phone_pattern
 
 
 @pytest.fixture

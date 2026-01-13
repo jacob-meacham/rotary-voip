@@ -1,12 +1,16 @@
 """Main entry point for the Rotary Phone VoIP Controller."""
 
+from __future__ import annotations
+
 import argparse
 import logging
 import signal
 import sys
 import time
 from dataclasses import dataclass
-from typing import Any, Dict, NoReturn, Optional, Tuple
+from logging.handlers import RotatingFileHandler
+from pathlib import Path
+from typing import TYPE_CHECKING, Any, Dict, NoReturn, Optional, Tuple
 
 from rotary_phone.call_logger import CallLogger
 from rotary_phone.call_manager import CallManager
@@ -24,6 +28,9 @@ from rotary_phone.sip.in_memory_client import InMemorySIPClient
 from rotary_phone.sip.pyvoip_client import PyVoIPClient
 from rotary_phone.sip.sip_client import SIPClient
 
+if TYPE_CHECKING:
+    from rotary_phone.audio import AudioHandler
+
 logger = logging.getLogger(__name__)
 
 
@@ -37,18 +44,64 @@ class HardwareComponents:
     dial_tone: DialTone
 
 
-def setup_logging(debug: bool = False) -> None:
+def setup_logging(
+    debug: bool = False,
+    config: Optional[ConfigManager] = None,
+) -> None:
     """Configure logging for the application.
 
     Args:
-        debug: If True, set log level to DEBUG, otherwise INFO
+        debug: If True, set log level to DEBUG (overrides config)
+        config: Optional config manager for log settings (level, file, rotation)
     """
-    log_level = logging.DEBUG if debug else logging.INFO
-    logging.basicConfig(
-        level=log_level,
-        format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-        datefmt="%Y-%m-%d %H:%M:%S",
-    )
+    # Get log settings from config or use defaults
+    log_config: Dict[str, Any] = {}
+    if config:
+        log_config = config.get("logging", {})
+
+    # Determine log level (--debug flag takes precedence)
+    if debug:
+        log_level = logging.DEBUG
+    else:
+        level_name = str(log_config.get("level", "INFO")).upper()
+        log_level = getattr(logging, level_name, logging.INFO)
+
+    # Log format
+    log_format = "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+    date_format = "%Y-%m-%d %H:%M:%S"
+
+    # Get root logger and set level
+    root_logger = logging.getLogger()
+    root_logger.setLevel(log_level)
+
+    # Remove existing handlers to avoid duplicates on reconfigure
+    for handler in root_logger.handlers[:]:
+        root_logger.removeHandler(handler)
+
+    # Console handler (always added)
+    console_handler = logging.StreamHandler()
+    console_handler.setLevel(log_level)
+    console_handler.setFormatter(logging.Formatter(log_format, datefmt=date_format))
+    root_logger.addHandler(console_handler)
+
+    # File handler (if configured)
+    log_file = log_config.get("file", "")
+    if log_file:
+        # Ensure parent directory exists
+        log_path = Path(log_file)
+        log_path.parent.mkdir(parents=True, exist_ok=True)
+
+        max_bytes = int(log_config.get("max_bytes", 10485760))  # 10MB default
+        backup_count = int(log_config.get("backup_count", 3))
+
+        file_handler = RotatingFileHandler(
+            log_file,
+            maxBytes=max_bytes,
+            backupCount=backup_count,
+        )
+        file_handler.setLevel(log_level)
+        file_handler.setFormatter(logging.Formatter(log_format, datefmt=date_format))
+        root_logger.addHandler(file_handler)
 
 
 def parse_args() -> argparse.Namespace:
@@ -194,6 +247,47 @@ def _init_call_logging(
         return None, None
 
 
+def _init_audio_handler(config: ConfigManager, mock_mode: bool) -> Optional["AudioHandler"]:
+    """Initialize USB audio handler for call audio.
+
+    Args:
+        config: Configuration manager
+        mock_mode: If True, skip audio initialization (mock mode)
+
+    Returns:
+        AudioHandler instance, or None if disabled or initialization fails
+    """
+    if mock_mode:
+        logger.info("  - AudioHandler disabled in mock mode")
+        return None
+
+    audio_config: Dict[str, Any] = config.get("audio", {})
+    device_name = audio_config.get("usb_device")
+    input_gain = audio_config.get("input_gain", 1.0)
+    output_volume = audio_config.get("output_volume", 1.0)
+
+    try:
+        from rotary_phone.audio import AudioHandler  # pylint: disable=import-outside-toplevel
+
+        handler = AudioHandler(
+            device_name=device_name,
+            input_gain=input_gain,
+            output_volume=output_volume,
+        )
+        if device_name:
+            logger.info("  - AudioHandler initialized (device: %s)", device_name)
+        else:
+            logger.info("  - AudioHandler initialized (auto-detect USB)")
+        return handler
+
+    except ImportError as e:
+        logger.warning("PyAudio not installed, audio disabled: %s", e)
+        return None
+    except Exception as e:
+        logger.warning("Failed to initialize AudioHandler: %s (continuing without)", e)
+        return None
+
+
 def _start_web_server(
     call_manager: CallManager,
     config: ConfigManager,
@@ -215,7 +309,9 @@ def _start_web_server(
 
     from rotary_phone.web.app import create_app
 
-    # Create FastAPI app
+    host = config.get("web.host", "0.0.0.0")
+    port = config.get("web.port", 7474)
+
     web_app = create_app(
         call_manager=call_manager,
         config_manager=config,
@@ -223,12 +319,11 @@ def _start_web_server(
         database=database,
     )
 
-    # Start FastAPI in daemon thread
     def run_web_server() -> None:
         uvicorn.run(
             web_app,
-            host=config.get("web.host", "0.0.0.0"),
-            port=config.get("web.port", 7474),
+            host=host,
+            port=port,
             log_level="warning",  # Reduce uvicorn logging noise
         )
 
@@ -237,8 +332,8 @@ def _start_web_server(
 
     logger.info(
         "  - Web admin interface started at http://%s:%d",
-        config.get("web.host", "0.0.0.0"),
-        config.get("web.port", 7474),
+        host,
+        port,
     )
 
 
@@ -361,9 +456,11 @@ def _shutdown(
         logger.warning("Error cleaning up hardware: %s", e)
 
 
-def main() -> NoReturn:  # pylint: disable=too-many-statements
+def main() -> NoReturn:  # pylint: disable=too-many-statements,too-many-branches
     """Main application entry point."""
     args = parse_args()
+
+    # Basic logging setup (before config load, for startup errors)
     setup_logging(args.debug)
 
     logger.info("=" * 60)
@@ -377,6 +474,9 @@ def main() -> NoReturn:  # pylint: disable=too-many-statements
 
     # Load configuration
     config = _load_config(args.config)
+
+    # Reconfigure logging with full settings from config
+    setup_logging(args.debug, config)
 
     # Initialize hardware interface
     try:
@@ -408,6 +508,10 @@ def main() -> NoReturn:  # pylint: disable=too-many-statements
     logger.info("Initializing call logging...")
     call_logger, database = _init_call_logging(config)
 
+    # Initialize USB audio handler
+    logger.info("Initializing audio handler...")
+    audio_handler = _init_audio_handler(config, args.mock_gpio)
+
     # Initialize CallManager to wire everything together
     logger.info("Initializing CallManager...")
     try:
@@ -419,6 +523,7 @@ def main() -> NoReturn:  # pylint: disable=too-many-statements
             sip_client=sip_client,
             dial_tone=hw.dial_tone,
             call_logger=call_logger,
+            audio_handler=audio_handler,
         )
         logger.info("  - CallManager initialized")
     except Exception as e:

@@ -23,6 +23,9 @@ let ringTestTimeout = null;
 let soundFiles = [];
 let soundAssignments = {};
 let currentlyPlaying = null;
+let logEntries = [];
+let logEventSource = null;
+let isLogStreaming = false;
 
 // =============================================================================
 // Navigation
@@ -33,21 +36,38 @@ function showPage(pageName) {
     document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
 
     document.getElementById('page-' + pageName).classList.add('active');
-    event.target.closest('.nav-item').classList.add('active');
+
+    // Find and highlight the nav item (if in sidebar)
+    const navItems = document.querySelectorAll('.sidebar-nav .nav-item');
+    navItems.forEach(n => {
+        const onclick = n.getAttribute('onclick');
+        if (onclick && onclick.includes(`'${pageName}'`)) {
+            n.classList.add('active');
+        }
+    });
+
     currentPage = pageName;
 
     if (pageName === 'calls') {
         callLogState.currentPage = 0;
         loadCallLog();
     } else if (pageName === 'settings') {
-        loadAllowlist();
-        loadSpeedDial();
         loadSoundFiles();
         loadSystemConfig();
     } else if (pageName === 'dashboard') {
         loadStatus();
         loadDashboardStats();
         loadRecentCalls();
+    } else if (pageName === 'allowlist') {
+        loadAllowlist();
+    } else if (pageName === 'speeddial') {
+        loadSpeedDial();
+    } else if (pageName === 'logs') {
+        loadLogs();
+        // Auto-start streaming when viewing logs
+        if (!isLogStreaming) {
+            toggleLogStream();
+        }
     }
 }
 
@@ -329,7 +349,7 @@ async function loadAllowlist() {
         document.getElementById('allow-all-toggle').checked = allowlistData.allow_all;
         updateAllowlistUI();
     } catch (error) {
-        showMessage('settings-message', 'error', 'Failed to load allowlist');
+        showMessage('allowlist-message', 'error', 'Failed to load allowlist');
     }
 }
 
@@ -408,13 +428,13 @@ async function saveAllowlist() {
         });
         const result = await response.json();
         if (response.ok) {
-            showMessage('settings-message', 'success', 'Allowlist saved');
+            showMessage('allowlist-message', 'success', 'Allowlist saved');
             loadAllowlist();
         } else {
-            showMessage('settings-message', 'error', result.detail || 'Failed to save');
+            showMessage('allowlist-message', 'error', result.detail || 'Failed to save');
         }
     } catch (error) {
-        showMessage('settings-message', 'error', error.message);
+        showMessage('allowlist-message', 'error', error.message);
     }
 }
 
@@ -430,7 +450,7 @@ async function loadSpeedDial() {
         updateSpeedDialUI();
     } catch (error) {
         console.error('Failed to load speed dial:', error);
-        showMessage('settings-message', 'error', 'Failed to load speed dial');
+        showMessage('speeddial-message', 'error', 'Failed to load speed dial');
     }
 }
 
@@ -497,13 +517,13 @@ async function saveSpeedDial() {
         });
         const result = await response.json();
         if (response.ok) {
-            showMessage('settings-message', 'success', 'Speed dial saved successfully');
+            showMessage('speeddial-message', 'success', 'Speed dial saved successfully');
             loadSpeedDial();
         } else {
-            showMessage('settings-message', 'error', result.detail || 'Failed to save speed dial');
+            showMessage('speeddial-message', 'error', result.detail || 'Failed to save speed dial');
         }
     } catch (error) {
-        showMessage('settings-message', 'error', error.message);
+        showMessage('speeddial-message', 'error', error.message);
     }
 }
 
@@ -919,6 +939,212 @@ function escapeHtml(text) {
     const div = document.createElement('div');
     div.textContent = text;
     return div.innerHTML;
+}
+
+// =============================================================================
+// Gear Menu
+// =============================================================================
+
+function toggleGearMenu(event) {
+    event.stopPropagation();
+    const menu = document.getElementById('gear-menu');
+    menu.classList.toggle('active');
+}
+
+function closeGearMenu() {
+    const menu = document.getElementById('gear-menu');
+    menu.classList.remove('active');
+}
+
+// Close gear menu when clicking outside
+document.addEventListener('click', (e) => {
+    const menu = document.getElementById('gear-menu');
+    const btn = document.querySelector('.gear-btn');
+    if (menu && btn && !menu.contains(e.target) && !btn.contains(e.target)) {
+        menu.classList.remove('active');
+    }
+});
+
+// =============================================================================
+// Log Viewer
+// =============================================================================
+
+async function loadLogs() {
+    const viewer = document.getElementById('log-viewer');
+    try {
+        const response = await fetch('/api/logs?limit=1000');
+        const data = await response.json();
+
+        // Reverse to show oldest at top (chronological order)
+        logEntries = (data.entries || []).reverse();
+        renderLogs();
+        updateLogCount();
+
+        // Scroll to bottom (newest logs)
+        viewer.scrollTop = viewer.scrollHeight;
+    } catch (error) {
+        viewer.innerHTML = `<div class="log-empty">Error loading logs: ${error.message}</div>`;
+    }
+}
+
+function renderLogs() {
+    const viewer = document.getElementById('log-viewer');
+    const levelFilter = document.getElementById('log-level-filter').value.toUpperCase();
+    const searchText = document.getElementById('log-search').value.toLowerCase();
+
+    const filtered = logEntries.filter(entry => {
+        if (levelFilter && entry.level !== levelFilter) return false;
+        if (searchText) {
+            const searchable = `${entry.logger} ${entry.message}`.toLowerCase();
+            if (!searchable.includes(searchText)) return false;
+        }
+        return true;
+    });
+
+    if (filtered.length === 0) {
+        viewer.innerHTML = '<div class="log-empty">No log entries found</div>';
+        return;
+    }
+
+    viewer.innerHTML = filtered.map(entry => {
+        const time = new Date(entry.timestamp).toLocaleTimeString();
+        return `
+            <div class="log-entry level-${entry.level.toLowerCase()}">
+                <span class="log-timestamp">${time}</span>
+                <span class="log-level">${entry.level}</span>
+                <span class="log-logger" title="${escapeHtml(entry.logger)}">${escapeHtml(entry.logger.split('.').pop())}</span>
+                <span class="log-message">${escapeHtml(entry.message)}</span>
+            </div>
+        `;
+    }).join('');
+}
+
+function filterLogs() {
+    renderLogs();
+    updateLogCount();
+}
+
+function updateLogCount() {
+    const levelFilter = document.getElementById('log-level-filter').value.toUpperCase();
+    const searchText = document.getElementById('log-search').value.toLowerCase();
+
+    const filtered = logEntries.filter(entry => {
+        if (levelFilter && entry.level !== levelFilter) return false;
+        if (searchText) {
+            const searchable = `${entry.logger} ${entry.message}`.toLowerCase();
+            if (!searchable.includes(searchText)) return false;
+        }
+        return true;
+    });
+
+    document.getElementById('log-count').textContent = `${filtered.length} of ${logEntries.length} entries`;
+}
+
+function toggleLogStream() {
+    if (isLogStreaming) {
+        stopLogStream();
+    } else {
+        startLogStream();
+    }
+}
+
+function startLogStream() {
+    if (logEventSource) {
+        logEventSource.close();
+    }
+
+    const levelFilter = document.getElementById('log-level-filter').value;
+    let url = '/api/logs/stream';
+    if (levelFilter) {
+        url += `?level=${levelFilter}`;
+    }
+
+    logEventSource = new EventSource(url);
+
+    logEventSource.onopen = () => {
+        isLogStreaming = true;
+        document.getElementById('log-stream-status').textContent = 'Streaming';
+        document.getElementById('log-stream-status').className = 'connected';
+        document.getElementById('log-stream-btn').classList.add('streaming');
+        document.getElementById('stream-icon').innerHTML = '&#9632;';
+    };
+
+    logEventSource.onmessage = (event) => {
+        try {
+            const entry = JSON.parse(event.data);
+            logEntries.push(entry);
+
+            // Keep max 2000 entries
+            if (logEntries.length > 2000) {
+                logEntries.shift();
+            }
+
+            renderLogs();
+            updateLogCount();
+
+            // Auto-scroll to bottom
+            const viewer = document.getElementById('log-viewer');
+            viewer.scrollTop = viewer.scrollHeight;
+        } catch (e) {
+            // Ignore parse errors (keepalive messages, etc.)
+        }
+    };
+
+    logEventSource.onerror = () => {
+        isLogStreaming = false;
+        document.getElementById('log-stream-status').textContent = 'Disconnected';
+        document.getElementById('log-stream-status').className = 'disconnected';
+        document.getElementById('log-stream-btn').classList.remove('streaming');
+        document.getElementById('stream-icon').innerHTML = '&#9654;';
+
+        // Try to reconnect after 2 seconds
+        setTimeout(() => {
+            if (currentPage === 'logs' && !isLogStreaming) {
+                startLogStream();
+            }
+        }, 2000);
+    };
+}
+
+function stopLogStream() {
+    if (logEventSource) {
+        logEventSource.close();
+        logEventSource = null;
+    }
+    isLogStreaming = false;
+    document.getElementById('log-stream-status').textContent = 'Disconnected';
+    document.getElementById('log-stream-status').className = 'disconnected';
+    document.getElementById('log-stream-btn').classList.remove('streaming');
+    document.getElementById('stream-icon').innerHTML = '&#9654;';
+}
+
+function clearLogDisplay() {
+    logEntries = [];
+    renderLogs();
+    updateLogCount();
+}
+
+async function changeLogLevel() {
+    const level = document.getElementById('runtime-log-level').value;
+
+    try {
+        const response = await fetch('/api/settings/log-level', {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ level })
+        });
+
+        if (response.ok) {
+            // Add a visual indicator that the level changed
+            const select = document.getElementById('runtime-log-level');
+            select.style.borderColor = 'var(--accent)';
+            setTimeout(() => {
+                select.style.borderColor = '';
+            }, 1000);
+        }
+    } catch (error) {
+        console.error('Failed to change log level:', error);
+    }
 }
 
 // =============================================================================

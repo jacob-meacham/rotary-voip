@@ -5,10 +5,12 @@ phone system, coordinating the hardware components (dial reader, hook monitor,
 ringer) with the SIP client to handle phone calls.
 """
 
+from __future__ import annotations
+
 import logging
 import threading
 from enum import Enum
-from typing import Optional
+from typing import TYPE_CHECKING, Optional
 
 from rotary_phone.call_logger import CallLogger
 from rotary_phone.config.config_manager import ConfigManager
@@ -17,6 +19,9 @@ from rotary_phone.hardware.dial_tone import DialTone
 from rotary_phone.hardware.hook_monitor import HookMonitor, HookState
 from rotary_phone.hardware.ringer import Ringer
 from rotary_phone.sip.sip_client import SIPClient
+
+if TYPE_CHECKING:
+    from rotary_phone.audio import AudioHandler
 
 logger = logging.getLogger(__name__)
 
@@ -56,6 +61,7 @@ class CallManager:  # pylint: disable=too-many-instance-attributes
         sip_client: SIPClient,
         dial_tone: Optional[DialTone] = None,
         call_logger: Optional[CallLogger] = None,
+        audio_handler: Optional["AudioHandler"] = None,
     ) -> None:
         """Initialize the call manager.
 
@@ -67,6 +73,7 @@ class CallManager:  # pylint: disable=too-many-instance-attributes
             sip_client: SIP client for VoIP calls
             dial_tone: Optional dial tone player
             call_logger: Optional call logger for persistence
+            audio_handler: Optional audio handler for USB audio during calls
         """
         self._config = config
         self._hook_monitor = hook_monitor
@@ -75,6 +82,7 @@ class CallManager:  # pylint: disable=too-many-instance-attributes
         self._sip_client = sip_client
         self._dial_tone = dial_tone
         self._call_logger = call_logger
+        self._audio_handler = audio_handler
 
         self._state = PhoneState.IDLE
         self._dialed_number = ""
@@ -228,6 +236,14 @@ class CallManager:  # pylint: disable=too-many-instance-attributes
                     # Log call answered (for incoming calls)
                     if self._call_logger:
                         self._call_logger.on_call_answered()
+                    # Start USB audio for the call
+                    if self._audio_handler:
+                        voip_call = self._sip_client.get_current_call()
+                        if voip_call:
+                            try:
+                                self._audio_handler.start(voip_call)
+                            except Exception as audio_err:
+                                logger.error("Failed to start audio: %s", audio_err)
                     self._transition_to(PhoneState.CONNECTED)
                 except Exception as e:
                     logger.error("Failed to answer call: %s", e)
@@ -270,6 +286,12 @@ class CallManager:  # pylint: disable=too-many-instance-attributes
 
             # Hangup if in a call
             if self._state in (PhoneState.CALLING, PhoneState.CONNECTED):
+                # Stop USB audio
+                if self._audio_handler:
+                    try:
+                        self._audio_handler.stop()
+                    except Exception as audio_err:
+                        logger.error("Failed to stop audio: %s", audio_err)
                 # Log call ended by user hanging up
                 if self._call_logger:
                     status = "completed" if self._state == PhoneState.CONNECTED else "unanswered"
@@ -446,6 +468,15 @@ class CallManager:  # pylint: disable=too-many-instance-attributes
             if self._call_logger:
                 self._call_logger.on_call_answered()
 
+            # Start USB audio for the call
+            if self._audio_handler:
+                voip_call = self._sip_client.get_current_call()
+                if voip_call:
+                    try:
+                        self._audio_handler.start(voip_call)
+                    except Exception as e:
+                        logger.error("Failed to start audio: %s", e)
+
             self._transition_to(PhoneState.CONNECTED)
 
     def _on_call_ended(self) -> None:
@@ -457,6 +488,13 @@ class CallManager:  # pylint: disable=too-many-instance-attributes
             if self._call_attempt_timer:
                 self._call_attempt_timer.cancel()
                 self._call_attempt_timer = None
+
+            # Stop USB audio
+            if self._audio_handler:
+                try:
+                    self._audio_handler.stop()
+                except Exception as e:
+                    logger.error("Failed to stop audio: %s", e)
 
             # Determine call status for logging
             call_status = self._determine_call_status()

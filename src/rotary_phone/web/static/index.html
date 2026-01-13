@@ -26,9 +26,13 @@
                     <span class="nav-icon">&#128222;</span>
                     <span class="nav-text">Call Log</span>
                 </a>
-                <a class="nav-item" onclick="showPage('settings')">
-                    <span class="nav-icon">&#9881;</span>
-                    <span class="nav-text">Settings</span>
+                <a class="nav-item" onclick="showPage('allowlist')">
+                    <span class="nav-icon">&#128274;</span>
+                    <span class="nav-text">Allowed Numbers</span>
+                </a>
+                <a class="nav-item" onclick="showPage('speeddial')">
+                    <span class="nav-icon">&#9889;</span>
+                    <span class="nav-text">Speed Dial</span>
                 </a>
             </div>
 
@@ -36,6 +40,21 @@
                 <div class="connection-status">
                     <span class="status-dot" id="connection-dot"></span>
                     <span id="connection-text">Connected</span>
+                </div>
+                <div class="gear-menu-container">
+                    <button class="gear-btn" onclick="toggleGearMenu(event)" title="Settings">
+                        <span>&#9881;</span>
+                    </button>
+                    <div class="gear-menu" id="gear-menu">
+                        <a class="gear-menu-item" onclick="showPage('logs'); closeGearMenu();">
+                            <span class="gear-menu-icon">&#128196;</span>
+                            <span>View Logs</span>
+                        </a>
+                        <a class="gear-menu-item" onclick="showPage('settings'); closeGearMenu();">
+                            <span class="gear-menu-icon">&#128296;</span>
+                            <span>Advanced Settings</span>
+                        </a>
+                    </div>
                 </div>
             </div>
         </nav>
@@ -170,80 +189,121 @@
                 </div>
             </div>
 
-            <!-- Settings Page -->
+            <!-- Allowlist Page -->
+            <div id="page-allowlist" class="page">
+                <div class="page-header">
+                    <h1 class="page-title">Allowed Numbers</h1>
+                    <p class="page-subtitle">Control which numbers can be dialed</p>
+                </div>
+
+                <div id="allowlist-message"></div>
+
+                <div class="card">
+                    <div class="toggle-row">
+                        <div>
+                            <div class="toggle-label">Allow All Numbers</div>
+                            <div class="toggle-description">Disable restrictions and allow dialing any number</div>
+                        </div>
+                        <label class="toggle">
+                            <input type="checkbox" id="allow-all-toggle" onchange="toggleAllowAll()">
+                            <span class="toggle-slider"></span>
+                        </label>
+                    </div>
+
+                    <div id="allowlist-entries-container" style="margin-top: 20px;">
+                        <div class="form-label">Allowed Phone Numbers</div>
+                        <div id="allowlist-entries"></div>
+                        <button class="btn btn-secondary btn-sm" onclick="addAllowlistEntry()" style="margin-top: 12px;">
+                            + Add Number
+                        </button>
+                    </div>
+
+                    <div style="margin-top: 24px; display: flex; gap: 12px;">
+                        <button class="btn btn-primary" onclick="saveAllowlist()">Save Changes</button>
+                        <button class="btn btn-secondary" onclick="loadAllowlist()">Reset</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Speed Dial Page -->
+            <div id="page-speeddial" class="page">
+                <div class="page-header">
+                    <h1 class="page-title">Speed Dial</h1>
+                    <p class="page-subtitle">Quick dial shortcuts (1-2 digit codes)</p>
+                </div>
+
+                <div id="speeddial-message"></div>
+
+                <div class="card">
+                    <div id="speed-dial-entries"></div>
+                    <button class="btn btn-secondary btn-sm" onclick="addSpeedDialEntry()" style="margin-top: 12px;">
+                        + Add Speed Dial
+                    </button>
+                    <div style="margin-top: 24px; display: flex; gap: 12px;">
+                        <button class="btn btn-primary" onclick="saveSpeedDial()">Save Changes</button>
+                        <button class="btn btn-secondary" onclick="loadSpeedDial()">Reset</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Logs Page -->
+            <div id="page-logs" class="page">
+                <div class="page-header">
+                    <h1 class="page-title">System Logs</h1>
+                    <p class="page-subtitle">View real-time application logs</p>
+                </div>
+
+                <div class="card">
+                    <div class="log-controls">
+                        <div class="log-controls-left">
+                            <select id="log-level-filter" onchange="filterLogs()">
+                                <option value="">All Levels</option>
+                                <option value="DEBUG">Debug</option>
+                                <option value="INFO">Info</option>
+                                <option value="WARNING">Warning</option>
+                                <option value="ERROR">Error</option>
+                            </select>
+                            <input type="text" id="log-search" placeholder="Search logs..." onkeyup="filterLogs()">
+                        </div>
+                        <div class="log-controls-right">
+                            <div class="log-level-control">
+                                <label>Log Level:</label>
+                                <select id="runtime-log-level" onchange="changeLogLevel()">
+                                    <option value="DEBUG">Debug</option>
+                                    <option value="INFO" selected>Info</option>
+                                    <option value="WARNING">Warning</option>
+                                    <option value="ERROR">Error</option>
+                                </select>
+                            </div>
+                            <button class="btn btn-secondary btn-sm" id="log-stream-btn" onclick="toggleLogStream()">
+                                <span id="stream-icon">&#9654;</span> Stream
+                            </button>
+                            <button class="btn btn-secondary btn-sm" onclick="clearLogDisplay()">Clear</button>
+                        </div>
+                    </div>
+
+                    <div class="log-viewer" id="log-viewer">
+                        <div class="log-loading">Loading logs...</div>
+                    </div>
+
+                    <div class="log-status">
+                        <span id="log-count">0 entries</span>
+                        <span id="log-stream-status">Disconnected</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Settings Page (Advanced Settings) -->
             <div id="page-settings" class="page">
                 <div class="page-header">
-                    <h1 class="page-title">Settings</h1>
-                    <p class="page-subtitle">Configure your rotary phone</p>
+                    <h1 class="page-title">Advanced Settings</h1>
+                    <p class="page-subtitle">Configure sounds, timing, and system options</p>
                 </div>
 
                 <div id="settings-message"></div>
 
-                <!-- Allowlist Section -->
-                <div class="settings-section" id="section-allowlist">
-                    <div class="settings-header" onclick="toggleSection('allowlist')">
-                        <div class="settings-header-left">
-                            <div class="settings-icon">&#128274;</div>
-                            <div>
-                                <div class="settings-title">Allowed Numbers</div>
-                                <div class="settings-description">Control which numbers can be dialed</div>
-                            </div>
-                        </div>
-                        <span class="settings-chevron">&#9660;</span>
-                    </div>
-                    <div class="settings-content">
-                        <div class="toggle-row">
-                            <div>
-                                <div class="toggle-label">Allow All Numbers</div>
-                                <div class="toggle-description">Disable restrictions and allow dialing any number</div>
-                            </div>
-                            <label class="toggle">
-                                <input type="checkbox" id="allow-all-toggle" onchange="toggleAllowAll()">
-                                <span class="toggle-slider"></span>
-                            </label>
-                        </div>
-
-                        <div id="allowlist-entries-container" style="margin-top: 20px;">
-                            <div class="form-label">Allowed Phone Numbers</div>
-                            <div id="allowlist-entries"></div>
-                            <button class="btn btn-secondary btn-sm" onclick="addAllowlistEntry()" style="margin-top: 12px;">
-                                + Add Number
-                            </button>
-                        </div>
-
-                        <div style="margin-top: 24px; display: flex; gap: 12px;">
-                            <button class="btn btn-primary" onclick="saveAllowlist()">Save Changes</button>
-                            <button class="btn btn-secondary" onclick="loadAllowlist()">Reset</button>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Speed Dial Section -->
-                <div class="settings-section" id="section-speeddial">
-                    <div class="settings-header" onclick="toggleSection('speeddial')">
-                        <div class="settings-header-left">
-                            <div class="settings-icon">&#9889;</div>
-                            <div>
-                                <div class="settings-title">Speed Dial</div>
-                                <div class="settings-description">Quick dial shortcuts (1-2 digit codes)</div>
-                            </div>
-                        </div>
-                        <span class="settings-chevron">&#9660;</span>
-                    </div>
-                    <div class="settings-content">
-                        <div id="speed-dial-entries"></div>
-                        <button class="btn btn-secondary btn-sm" onclick="addSpeedDialEntry()" style="margin-top: 12px;">
-                            + Add Speed Dial
-                        </button>
-                        <div style="margin-top: 24px; display: flex; gap: 12px;">
-                            <button class="btn btn-primary" onclick="saveSpeedDial()">Save Changes</button>
-                            <button class="btn btn-secondary" onclick="loadSpeedDial()">Reset</button>
-                        </div>
-                    </div>
-                </div>
-
                 <!-- Sounds Section -->
-                <div class="settings-section" id="section-sounds">
+                <div class="settings-section open" id="section-sounds">
                     <div class="settings-header" onclick="toggleSection('sounds')">
                         <div class="settings-header-left">
                             <div class="settings-icon">&#128266;</div>
@@ -369,13 +429,13 @@
                 </div>
 
                 <!-- System Info Section -->
-                <div class="settings-section" id="section-system">
+                <div class="settings-section open" id="section-system">
                     <div class="settings-header" onclick="toggleSection('system')">
                         <div class="settings-header-left">
                             <div class="settings-icon">&#128296;</div>
                             <div>
                                 <div class="settings-title">System Information</div>
-                                <div class="settings-description">View current configuration (read-only)</div>
+                                <div class="settings-description">View current configuration</div>
                             </div>
                         </div>
                         <span class="settings-chevron">&#9660;</span>

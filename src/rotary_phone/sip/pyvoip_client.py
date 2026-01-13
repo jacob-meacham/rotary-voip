@@ -9,7 +9,7 @@ import logging
 import threading
 import time
 import wave
-from typing import Callable, Optional
+from typing import Any, Callable, Optional
 
 from pyVoIP.VoIP import CallState as PyVoIPCallState
 from pyVoIP.VoIP import PhoneStatus as PyVoIPPhoneStatus
@@ -301,6 +301,15 @@ class PyVoIPClient(SIPClient):
 
             if self._on_call_ended:
                 self._on_call_ended()
+
+    def get_current_call(self) -> Optional[Any]:
+        """Get the current VoIPCall object for audio handling.
+
+        Returns:
+            VoIPCall if in a call, None otherwise
+        """
+        with self._lock:
+            return self._current_call
 
     def _on_incoming_call_internal(self, call: VoIPCall) -> None:
         """Internal callback for incoming calls from pyVoIP.

@@ -51,26 +51,26 @@ allowlist:
 
 ---
 
-## Phase W2: Speed Dial Management API & UI
+## Phase W2: Speed Dial Management API & UI - COMPLETE
 
 ### Goal
 Allow users to create and manage speed dial shortcuts.
 
 ### Backend Tasks
-- [ ] `GET /api/speed-dial` - Return current speed dial mappings
-- [ ] `PUT /api/speed-dial` - Update entire speed dial config
-- [ ] `POST /api/speed-dial` - Add single speed dial entry
-- [ ] `DELETE /api/speed-dial/{code}` - Remove speed dial entry
-- [ ] Validation: Code must be 1-2 digits, destination must be valid phone number
-- [ ] Update ConfigManager in-memory after save
+- [x] `GET /api/speed-dial` - Return current speed dial mappings
+- [x] `PUT /api/speed-dial` - Update entire speed dial config
+- [x] `POST /api/speed-dial` - Add single speed dial entry
+- [x] `DELETE /api/speed-dial/{code}` - Remove speed dial entry
+- [x] Validation: Code must be 1-2 digits, destination must be valid phone number
+- [x] Update ConfigManager in-memory after save
 
 ### Frontend Tasks
-- [ ] Add "Speed Dial" tab to UI
-- [ ] Table showing: Code | Destination | Label (optional) | Actions
-- [ ] Add new speed dial form (code input, phone number input)
-- [ ] Edit existing entries inline
-- [ ] Delete with confirmation
-- [ ] Import/export as JSON/CSV
+- [x] Add Speed Dial section in Settings page with collapsible accordion
+- [x] List showing: Code → Destination with inline editing
+- [x] Add new speed dial form (code input, phone number input)
+- [x] Edit existing entries inline
+- [x] Delete entries
+- [ ] Import/export as JSON/CSV (optional enhancement)
 
 ### Config Structure
 ```yaml
@@ -82,26 +82,26 @@ speed_dial:
 
 ---
 
-## Phase W3: Sound File Management Enhancement
+## Phase W3: Sound File Management Enhancement - COMPLETE
 
 ### Goal
 Complete sound management with playback, deletion, and assignment.
 
 ### Backend Tasks
-- [ ] `GET /api/sounds/{filename}` - Stream audio file for playback
-- [ ] `DELETE /api/sounds/{filename}` - Delete a sound file
-- [ ] `GET /api/sound-assignments` - Get current sound assignments from config
-- [ ] `PUT /api/sound-assignments` - Update sound assignments
+- [x] `GET /api/sounds/{filename}` - Stream audio file for playback
+- [x] `DELETE /api/sounds/{filename}` - Delete a sound file
+- [x] `GET /api/sound-assignments` - Get current sound assignments from config
+- [x] `PUT /api/sound-assignments` - Update sound assignments
 
 ### Frontend Tasks
-- [ ] Add playback button for each sound (HTML5 audio)
-- [ ] Add delete button with confirmation
-- [ ] Sound assignment section showing:
+- [x] Add playback button for each sound (HTML5 audio)
+- [x] Add delete button with confirmation
+- [x] Sound assignment section showing:
   - Ring sound -> dropdown of available .wav files
   - Dial tone -> dropdown
   - Busy tone -> dropdown
   - Error tone -> dropdown
-- [ ] Preview before assigning
+- [x] Preview sounds via playback button
 
 ### Config Structure
 ```yaml
@@ -114,23 +114,24 @@ audio:
 
 ---
 
-## Phase W4: Ring Settings UI
+## Phase W4: Ring Settings UI - COMPLETE
 
 ### Goal
 Allow configuration of ring timing and behavior.
 
 ### Backend Tasks
-- [ ] `GET /api/ring-settings` - Get ring configuration
-- [ ] `PUT /api/ring-settings` - Update ring settings
-- [ ] Validation: Values must be positive numbers within reasonable ranges
+- [x] `GET /api/ring-settings` - Get ring configuration
+- [x] `PUT /api/ring-settings` - Update ring settings
+- [x] Validation: Values must be positive numbers within reasonable ranges
 
 ### Frontend Tasks
-- [ ] Add "Ring Settings" section (could be in Settings tab)
-- [ ] Configurable fields:
+- [x] Add Ring Settings to Sounds section (not separate tab)
+- [x] Configurable fields:
   - Ring duration (seconds) - how long the ring plays
   - Ring pause (seconds) - silence between rings
-- [ ] Input validation with min/max
-- [ ] Test ring button (triggers a short ring on the phone)
+- [x] Input validation with min/max
+- [x] Test ring button (plays ring sound for configured duration)
+- [x] System Information shows full redacted config
 
 ### Config Structure
 ```yaml
@@ -303,16 +304,108 @@ web:
 
 ---
 
+## Phase W9: Advanced Settings & Log Viewer - COMPLETE
+
+### Goal
+Provide access to advanced configuration options and real-time log viewing for debugging.
+
+### Backend Tasks
+- [x] `GET /api/logs` - Stream or fetch recent log entries
+- [x] `GET /api/logs/stream` - SSE endpoint for real-time log streaming
+- [x] `GET /api/settings/timing` - Get all timing settings
+- [x] `PUT /api/settings/timing` - Update timing settings
+- [x] `GET /api/settings/logging` - Get logging configuration
+- [x] `PUT /api/settings/logging` - Update logging settings
+- [x] Log buffer/ring buffer for recent entries (in-memory)
+- [x] `DELETE /api/logs` - Clear in-memory log buffer
+
+### Frontend Tasks
+- [x] Add "Advanced" section in Settings (collapsed by default)
+- [x] Timing settings form:
+  - `inter_digit_timeout` - Time to wait for next digit before dialing
+  - `hook_debounce_time` - Debounce time for hook switch
+  - `pulse_timeout` - Time after last pulse before digit complete
+  - `sip_registration_timeout` - SIP registration timeout
+  - `call_attempt_timeout` - Outbound call timeout
+- [x] Logging settings:
+  - Log level selector (DEBUG, INFO, WARNING, ERROR)
+  - Log file path (optional)
+  - Max file size / rotation settings
+- [x] Log Viewer panel:
+  - Real-time log stream (auto-scroll)
+  - Start/stop streaming toggle
+  - Filter by log level
+  - Search/filter logs
+  - Clear log display
+- [ ] Download logs as file (optional enhancement)
+
+### Config Structure
+```yaml
+timing:
+  hook_debounce_time: 0.01
+  pulse_timeout: 0.3
+  sip_registration_timeout: 10.0
+  call_attempt_timeout: 60.0
+
+logging:
+  level: "INFO"
+  file: ""
+  max_bytes: 10485760
+  backup_count: 3
+```
+
+---
+
+## Phase W10: Deep Linking & URL Routing
+
+### Goal
+Enable direct URL access to specific pages and preserve navigation state.
+
+### Backend Tasks
+- [ ] Serve index.html for all non-API routes (SPA catch-all)
+
+### Frontend Tasks
+- [ ] Implement client-side routing with History API
+- [ ] URL structure:
+  - `/` or `/dashboard` - Dashboard page
+  - `/calls` - Call log page
+  - `/calls/:id` - Call detail modal (auto-open)
+  - `/settings` - Settings page
+  - `/settings/allowlist` - Settings with Allowlist section open
+  - `/settings/speed-dial` - Settings with Speed Dial section open
+  - `/settings/sounds` - Settings with Sounds section open
+  - `/settings/advanced` - Settings with Advanced section open
+- [ ] Update navigation to use `pushState`
+- [ ] Handle browser back/forward buttons
+- [ ] Parse URL on page load and navigate accordingly
+- [ ] Update page title based on current route
+- [ ] Shareable URLs (copy link to current view)
+
+### Technical Approach
+```javascript
+// Simple hash-based routing (easier, no server changes needed)
+window.addEventListener('hashchange', handleRoute);
+window.addEventListener('load', handleRoute);
+
+function handleRoute() {
+    const hash = window.location.hash.slice(1) || 'dashboard';
+    // Parse route and navigate
+}
+
+// Or History API (cleaner URLs, needs server catch-all)
+history.pushState({page: 'calls'}, 'Call Log', '/calls');
+```
+
+---
+
 ## Implementation Order & Dependencies
 
 ```
 Phase W1: Allowlist ─────────────────┐
-Phase W2: Speed Dial ────────────────┼──► Can be done in parallel
+Phase W2: Speed Dial ────────────────┼──► COMPLETE (W1-W5)
 Phase W3: Sound Management ──────────┤
-Phase W4: Ring Settings ─────────────┘
-                                     │
-                                     ▼
-Phase W5: Call Log ──────────────────► Needs database integration
+Phase W4: Ring Settings ─────────────┤
+Phase W5: Call Log ──────────────────┘
                                      │
                                      ▼
 Phase W6: WebSocket ─────────────────► Enhances all previous features
@@ -321,7 +414,13 @@ Phase W6: WebSocket ─────────────────► Enhan
 Phase W7: WiFi Provisioning ─────────► Needs network module (independent)
                                      │
                                      ▼
-Phase W8: Authentication ────────────► Should be last (applies to all)
+Phase W8: Authentication ────────────► Should be near last (applies to all)
+                                     │
+                                     ▼
+Phase W9: Advanced Settings ─────────► COMPLETE - Log viewer, timing config
+                                     │
+                                     ▼
+Phase W10: Deep Linking ─────────────► URL routing (can be done earlier)
 ```
 
 ---

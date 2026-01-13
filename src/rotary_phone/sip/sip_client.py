@@ -7,7 +7,7 @@ for different implementations (real PJSUA2, mock/in-memory, etc.).
 import logging
 from abc import ABC, abstractmethod
 from enum import Enum
-from typing import Callable, Optional
+from typing import Any, Callable, Optional
 
 logger = logging.getLogger(__name__)
 
@@ -82,6 +82,17 @@ class SIPClient(ABC):
     @abstractmethod
     def reject_call(self) -> None:
         """Reject an incoming call without answering."""
+
+    @abstractmethod
+    def get_current_call(self) -> Optional[Any]:
+        """Get the current call object for audio handling.
+
+        Returns the underlying call object (implementation-specific) which
+        provides read_audio()/write_audio() methods for call audio.
+
+        Returns:
+            Call object if in a call, None otherwise
+        """
 
     def get_call_state(self) -> CallState:
         """Get the current call state.

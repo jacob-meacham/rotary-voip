@@ -35,6 +35,9 @@ timing:
 
 # Audio Settings
 audio:
+  usb_device: null                        # Auto-detect USB device (or specify name)
+  input_gain: 1.0                         # Microphone gain (0.0-2.0)
+  output_volume: 1.0                      # Speaker volume (0.0-2.0)
   ring_sound: "sounds/ring.wav"           # Path to ring sound file
   dial_tone: "sounds/dialtone.wav"        # Path to dial tone
   busy_tone: "sounds/busy.wav"            # Path to busy signal
