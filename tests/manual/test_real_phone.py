@@ -27,11 +27,16 @@ Run with:
 WARNING: This will make actual SIP connections and may incur charges.
 """
 
+import audioop
 import os
+import struct
 import sys
 import threading
 import time
+import wave
+from datetime import datetime
 from pathlib import Path
+from typing import Optional
 from unittest.mock import Mock
 
 from dotenv import load_dotenv
@@ -164,6 +169,11 @@ class RealPhoneTestHarness:
         )
         self._usb_audio_auto_start = self.audio_config["auto_start"]
 
+        # Audio recording state
+        self._recording = False
+        self._recording_thread: Optional[threading.Thread] = None
+        self._recording_file: Optional[str] = None
+
         # Start the system
         print("Starting phone system...")
         self.call_manager.start()
@@ -213,6 +223,12 @@ class RealPhoneTestHarness:
                 PhoneState.CALLING,
                 PhoneState.RINGING,
             ):
+                # Stop recording if in progress
+                if self._recording:
+                    self._recording = False
+                    if self._recording_thread:
+                        self._recording_thread.join(timeout=2.0)
+                        self._recording_thread = None
                 # Stop USB audio if running
                 if self._audio_handler.is_running():
                     self._audio_handler.stop()
@@ -228,6 +244,11 @@ class RealPhoneTestHarness:
         self._monitor_running = False
         if self._monitor_thread:
             self._monitor_thread.join(timeout=1.0)
+        # Stop recording if in progress
+        if self._recording:
+            self._recording = False
+            if self._recording_thread:
+                self._recording_thread.join(timeout=2.0)
         # Stop USB audio if running
         if self._audio_handler.is_running():
             self._audio_handler.stop()
@@ -275,6 +296,93 @@ class RealPhoneTestHarness:
         print("→ Stopping USB audio...")
         self._audio_handler.stop()
         print("✓ USB audio stopped")
+
+    def start_recording(self, output_file: Optional[str] = None) -> None:
+        """Start recording incoming audio to a WAV file.
+
+        Records the raw audio from the VoIP call (before any resampling/playback)
+        for debugging purposes.
+
+        Args:
+            output_file: Optional path for output WAV file. If not provided,
+                         generates a timestamped filename in current directory.
+        """
+        if self._recording:
+            print("  Recording already in progress")
+            return
+
+        state = self.call_manager.get_state()
+        if state != PhoneState.CONNECTED:
+            print(f"  ✗ Cannot record - not in a call (state: {state.value})")
+            return
+
+        voip_call = self.sip_client.get_current_call()
+        if not voip_call:
+            print("  ✗ No active VoIP call found")
+            return
+
+        # Generate filename if not provided
+        if not output_file:
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            output_file = f"call_recording_{timestamp}.wav"
+
+        self._recording_file = output_file
+        self._recording = True
+
+        def _record_loop() -> None:
+            """Background thread that records audio from VoIP to WAV file."""
+            frames = []
+            voip_sample_rate = 8000
+            frame_size = 160  # 20ms at 8kHz
+
+            print(f"→ Recording to: {self._recording_file}")
+            print("  Recording raw 8kHz μ-law audio from VoIP...")
+
+            while self._recording:
+                try:
+                    # Read μ-law audio from VoIP call
+                    ulaw_data = voip_call.read_audio(frame_size, blocking=True)
+                    if ulaw_data:
+                        # Convert μ-law to 16-bit PCM for WAV file
+                        pcm_data = audioop.ulaw2lin(ulaw_data, 2)
+                        frames.append(pcm_data)
+                except Exception as e:
+                    if self._recording:  # Only log if we weren't stopping
+                        print(f"  Recording error: {e}")
+                    break
+
+            # Write WAV file
+            if frames:
+                try:
+                    with wave.open(self._recording_file, "wb") as wf:
+                        wf.setnchannels(1)  # Mono
+                        wf.setsampwidth(2)  # 16-bit
+                        wf.setframerate(voip_sample_rate)  # 8kHz
+                        wf.writeframes(b"".join(frames))
+
+                    duration = len(frames) * 0.02  # 20ms per frame
+                    print(f"✓ Recording saved: {self._recording_file}")
+                    print(f"  Duration: {duration:.1f}s, Frames: {len(frames)}")
+                except Exception as e:
+                    print(f"✗ Failed to save recording: {e}")
+            else:
+                print("  No audio was captured")
+
+        self._recording_thread = threading.Thread(target=_record_loop, daemon=True)
+        self._recording_thread.start()
+
+    def stop_recording(self) -> None:
+        """Stop recording and save the WAV file."""
+        if not self._recording:
+            print("  No recording in progress")
+            return
+
+        print("→ Stopping recording...")
+        self._recording = False
+
+        if self._recording_thread:
+            self._recording_thread.join(timeout=2.0)
+            self._recording_thread = None
 
     def hook_off(self) -> None:
         """Simulate picking up the phone."""
@@ -384,6 +492,10 @@ class RealPhoneTestHarness:
         print(f"Dialed Number:  {dialed or '(none)'}")
         print(f"Ringing:        {'YES' if ringing else 'NO'}")
         print(f"USB Audio:      {'ACTIVE (mic + speaker)' if usb_audio_running else 'OFF'}")
+        if self._recording:
+            print(f"Recording:      ACTIVE -> {self._recording_file}")
+        else:
+            print("Recording:      OFF")
         if error:
             print(f"Error:          {error}")
         print("=" * 60 + "\n")
@@ -401,6 +513,10 @@ def print_menu() -> None:
     print("USB AUDIO (bidirectional mic + speaker):")
     print("  m     - Start USB audio (mic + speaker for real conversation)")
     print("  n     - Stop USB audio")
+    print()
+    print("RECORDING (capture raw VoIP audio for debugging):")
+    print("  r     - Start recording incoming audio to WAV file")
+    print("  t     - Stop recording and save file")
     print()
     print("AUDIO FILE PLAYBACK:")
     print("  a     - Send audio file (WAV) to call")
@@ -471,6 +587,11 @@ def main() -> None:
                     harness.start_usb_audio()
                 elif cmd == "n":
                     harness.stop_usb_audio()
+                elif cmd == "r":
+                    file_path = input("  Output file (Enter for auto): ").strip()
+                    harness.start_recording(file_path if file_path else None)
+                elif cmd == "t":
+                    harness.stop_recording()
                 elif cmd == "a":
                     file_path = input("  Enter WAV file path: ").strip()
                     if file_path:

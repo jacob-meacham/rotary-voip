@@ -8,9 +8,20 @@ import audioop  # pylint: disable=deprecated-module
 import logging
 import threading
 import time
-from typing import Any, Optional, Tuple
+from typing import Any, Callable, Optional, Tuple
 
 logger = logging.getLogger(__name__)
+
+# Try to import scipy for high-quality resampling (optional)
+try:
+    from scipy import signal as scipy_signal
+    import numpy as np
+
+    HAS_SCIPY = True
+    logger.debug("scipy available - using high-quality polyphase resampling")
+except ImportError:
+    HAS_SCIPY = False
+    logger.debug("scipy not available - using audioop resampling (lower quality)")
 
 # Audio format constants for G.711 μ-law (PCMU)
 VOIP_SAMPLE_RATE = 8000  # 8 kHz for VoIP
@@ -22,7 +33,10 @@ SAMPLE_RATE = VOIP_SAMPLE_RATE
 FRAME_SIZE = VOIP_FRAME_SIZE
 
 # Common sample rates to try if device doesn't support 8kHz
-FALLBACK_SAMPLE_RATES = [8000, 48000, 44100, 16000]
+# Prefer 48kHz over 44.1kHz because 48000/8000=6 is a clean integer ratio
+# for better resampling quality (44100/8000=5.5125 causes artifacts)
+FALLBACK_SAMPLE_RATES = [8000, 48000, 16000, 44100]
+
 
 
 class AudioError(Exception):
@@ -81,9 +95,13 @@ class AudioHandler:  # pylint: disable=too-many-instance-attributes
         self._device_sample_rate: int = VOIP_SAMPLE_RATE
         self._device_frame_size: int = VOIP_FRAME_SIZE
 
-        # Resampling state for audioop.ratecv()
+        # Resampling state for audioop.ratecv() fallback
         self._capture_resample_state: Any = None
         self._playback_resample_state: Any = None
+
+        # Resample functions (set during start based on scipy availability)
+        self._resample_down: Optional[Callable[[bytes], bytes]] = None
+        self._resample_up: Optional[Callable[[bytes], bytes]] = None
 
         self._capture_thread: Optional[threading.Thread] = None
         self._playback_thread: Optional[threading.Thread] = None
@@ -153,6 +171,9 @@ class AudioHandler:  # pylint: disable=too-many-instance-attributes
             # Reset resampling state
             self._capture_resample_state = None
             self._playback_resample_state = None
+
+            # Set up resampling functions based on scipy availability
+            self._setup_resamplers()
 
             # Start capture thread
             self._capture_thread = threading.Thread(
@@ -345,6 +366,75 @@ class AudioHandler:  # pylint: disable=too-many-instance-attributes
         logger.warning("Could not detect supported sample rate, defaulting to %d Hz", VOIP_SAMPLE_RATE)
         return VOIP_SAMPLE_RATE
 
+    def _setup_resamplers(self) -> None:
+        """Set up resampling functions based on rate ratio and scipy availability."""
+        if self._device_sample_rate == VOIP_SAMPLE_RATE:
+            # No resampling needed
+            self._resample_down = None
+            self._resample_up = None
+            return
+
+        ratio = self._device_sample_rate // VOIP_SAMPLE_RATE
+
+        if HAS_SCIPY and self._device_sample_rate % VOIP_SAMPLE_RATE == 0:
+            # Use scipy polyphase resampling (high quality)
+            logger.info("Using scipy polyphase resampling (ratio %d:1)", ratio)
+            self._resample_down = self._make_scipy_downsampler(ratio)
+            self._resample_up = self._make_scipy_upsampler(ratio)
+        else:
+            # Fall back to audioop (lower quality)
+            if HAS_SCIPY:
+                logger.warning(
+                    "Non-integer ratio %d/%d - falling back to audioop resampling",
+                    self._device_sample_rate,
+                    VOIP_SAMPLE_RATE,
+                )
+            else:
+                logger.info("Using audioop resampling (install scipy for better quality)")
+            self._resample_down = None  # Will use audioop inline
+            self._resample_up = None
+
+    def _make_scipy_downsampler(self, ratio: int) -> Callable[[bytes], bytes]:
+        """Create a scipy-based downsampler function.
+
+        Args:
+            ratio: Downsampling ratio (e.g., 6 for 48kHz -> 8kHz)
+
+        Returns:
+            Function that downsamples 16-bit PCM bytes
+        """
+
+        def downsample(pcm_data: bytes) -> bytes:
+            # Convert bytes to numpy array
+            samples = np.frombuffer(pcm_data, dtype=np.int16).astype(np.float64)
+            # Decimate with anti-aliasing filter
+            downsampled = scipy_signal.decimate(samples, ratio, ftype="fir", zero_phase=False)
+            # Convert back to int16 bytes
+            return downsampled.astype(np.int16).tobytes()
+
+        return downsample
+
+    def _make_scipy_upsampler(self, ratio: int) -> Callable[[bytes], bytes]:
+        """Create a scipy-based upsampler function.
+
+        Args:
+            ratio: Upsampling ratio (e.g., 6 for 8kHz -> 48kHz)
+
+        Returns:
+            Function that upsamples 16-bit PCM bytes
+        """
+
+        def upsample(pcm_data: bytes) -> bytes:
+            # Convert bytes to numpy array (int16 -> float64 for processing)
+            samples = np.frombuffer(pcm_data, dtype=np.int16).astype(np.float64)
+            # Resample with interpolation filter
+            upsampled = scipy_signal.resample_poly(samples, ratio, 1)
+            # Clip to int16 range and convert
+            upsampled = np.clip(upsampled, -32768, 32767)
+            return upsampled.astype(np.int16).tobytes()
+
+        return upsample
+
     def _capture_loop(self) -> None:
         """Background thread: capture microphone audio and send to VoIP.
 
@@ -382,14 +472,19 @@ class AudioHandler:  # pylint: disable=too-many-instance-attributes
 
                     # Resample to VoIP rate (8kHz) if needed
                     if self._device_sample_rate != VOIP_SAMPLE_RATE:
-                        pcm_data, resample_state = audioop.ratecv(
-                            pcm_data,
-                            2,  # sample width (16-bit = 2 bytes)
-                            CHANNELS,
-                            self._device_sample_rate,
-                            VOIP_SAMPLE_RATE,
-                            resample_state,
-                        )
+                        if self._resample_down:
+                            # Use scipy high-quality resampling
+                            pcm_data = self._resample_down(pcm_data)
+                        else:
+                            # Fall back to audioop
+                            pcm_data, resample_state = audioop.ratecv(
+                                pcm_data,
+                                2,  # sample width (16-bit = 2 bytes)
+                                CHANNELS,
+                                self._device_sample_rate,
+                                VOIP_SAMPLE_RATE,
+                                resample_state,
+                            )
 
                     # Convert 16-bit linear PCM to 8-bit μ-law
                     ulaw_data = audioop.lin2ulaw(pcm_data, 2)
@@ -456,14 +551,19 @@ class AudioHandler:  # pylint: disable=too-many-instance-attributes
 
         # Resample from VoIP rate (8kHz) to device rate if needed
         if self._device_sample_rate != VOIP_SAMPLE_RATE:
-            pcm_data, resample_state = audioop.ratecv(
-                pcm_data,
-                2,  # sample width (16-bit = 2 bytes)
-                CHANNELS,
-                VOIP_SAMPLE_RATE,
-                self._device_sample_rate,
-                resample_state,
-            )
+            if self._resample_up:
+                # Use scipy high-quality resampling
+                pcm_data = self._resample_up(pcm_data)
+            else:
+                # Fall back to audioop
+                pcm_data, resample_state = audioop.ratecv(
+                    pcm_data,
+                    2,  # sample width (16-bit = 2 bytes)
+                    CHANNELS,
+                    VOIP_SAMPLE_RATE,
+                    self._device_sample_rate,
+                    resample_state,
+                )
 
         # Play to speaker
         stream.write(pcm_data)
