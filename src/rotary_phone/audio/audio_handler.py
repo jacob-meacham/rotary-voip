@@ -62,6 +62,7 @@ class AudioHandler:  # pylint: disable=too-many-instance-attributes
         device_name: Optional[str] = None,
         input_gain: float = 1.0,
         output_volume: float = 1.0,
+        noise_gate_threshold: int = 5,
     ) -> None:
         """Initialize the audio handler.
 
@@ -69,6 +70,9 @@ class AudioHandler:  # pylint: disable=too-many-instance-attributes
             device_name: Explicit device name to use (auto-detect if None)
             input_gain: Microphone gain multiplier (0.0-2.0, 1.0 = no change)
             output_volume: Speaker volume multiplier (0.0-2.0, 1.0 = no change)
+            noise_gate_threshold: Samples within ±threshold of silence (128) are
+                                  zeroed to reduce quantization noise hiss.
+                                  Set to 0 to disable. Default 5 removes most hiss.
 
         Raises:
             ValueError: If gain or volume is out of range
@@ -81,6 +85,7 @@ class AudioHandler:  # pylint: disable=too-many-instance-attributes
         self._device_name = device_name
         self._input_gain = input_gain
         self._output_volume = output_volume
+        self._noise_gate_threshold = noise_gate_threshold
 
         self._pyaudio: Any = None
         self._input_device_index: Optional[int] = None
@@ -102,10 +107,11 @@ class AudioHandler:  # pylint: disable=too-many-instance-attributes
         self._is_running = False
 
         logger.debug(
-            "AudioHandler initialized (device=%s, gain=%.2f, volume=%.2f)",
+            "AudioHandler initialized (device=%s, gain=%.2f, volume=%.2f, noise_gate=%d)",
             device_name or "auto",
             input_gain,
             output_volume,
+            noise_gate_threshold,
         )
 
     def start(self, voip_call: Any) -> None:
@@ -355,6 +361,33 @@ class AudioHandler:  # pylint: disable=too-many-instance-attributes
         logger.warning("Could not detect supported sample rate, defaulting to %d Hz", VOIP_SAMPLE_RATE)
         return VOIP_SAMPLE_RATE
 
+    def _apply_noise_gate(self, data: bytes) -> bytes:
+        """Apply noise gate to 8-bit unsigned audio data.
+
+        Samples within ±threshold of silence (128) are set to 128 (silence).
+        This reduces the audible hiss from 8-bit quantization noise.
+
+        Args:
+            data: 8-bit unsigned audio bytes (128 = silence)
+
+        Returns:
+            Noise-gated audio bytes
+        """
+        threshold = self._noise_gate_threshold
+        silence = 128
+        low = silence - threshold
+        high = silence + threshold
+
+        # Process each byte - set near-silence values to silence
+        result = bytearray(len(data))
+        for i, b in enumerate(data):
+            if low <= b <= high:
+                result[i] = silence
+            else:
+                result[i] = b
+
+        return bytes(result)
+
     def _capture_loop(self) -> None:
         """Background thread: capture microphone audio and send to VoIP.
 
@@ -459,6 +492,11 @@ class AudioHandler:  # pylint: disable=too-many-instance-attributes
 
         if not unsigned_8bit:
             return resample_state
+
+        # Apply noise gate to reduce quantization hiss
+        # Samples within ±threshold of silence (128) are set to silence
+        if self._noise_gate_threshold > 0:
+            unsigned_8bit = self._apply_noise_gate(unsigned_8bit)
 
         # Convert 8-bit unsigned -> 16-bit signed for PyAudio
         # First convert unsigned to signed by subtracting 128 (bias)

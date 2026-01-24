@@ -17,6 +17,7 @@ Configuration:
         AUDIO_AUTO_START=1        # Auto-start USB audio when call connects
         AUDIO_INPUT_GAIN=1.0      # Microphone gain (0.0-2.0)
         AUDIO_OUTPUT_VOLUME=1.0   # Speaker volume (0.0-2.0)
+        AUDIO_NOISE_GATE=5        # Noise gate threshold (0=disable, 5=default)
 
     Optional ringer configuration:
         RINGER_SOUND_FILE=/path/to/ring.wav  # Sound file to play when ringing
@@ -91,6 +92,7 @@ def get_audio_config() -> dict:
         "auto_start": os.getenv("AUDIO_AUTO_START", "").lower() in ("1", "true", "yes"),
         "input_gain": float(os.getenv("AUDIO_INPUT_GAIN", "1.0")),
         "output_volume": float(os.getenv("AUDIO_OUTPUT_VOLUME", "1.0")),
+        "noise_gate": int(os.getenv("AUDIO_NOISE_GATE", "5")),  # 0 to disable
         "ringer_sound_file": os.getenv("RINGER_SOUND_FILE"),  # None = GPIO toggle only
     }
 
@@ -115,6 +117,8 @@ class RealPhoneTestHarness:
         print(f"  Auto-start:   {'YES' if self.audio_config['auto_start'] else 'NO'}")
         print(f"  Input gain:   {self.audio_config['input_gain']:.1f}")
         print(f"  Output vol:   {self.audio_config['output_volume']:.1f}")
+        noise_gate = self.audio_config['noise_gate']
+        print(f"  Noise gate:   ±{noise_gate} {'(enabled)' if noise_gate > 0 else '(disabled)'}")
         ringer_sound = self.audio_config['ringer_sound_file']
         print(f"  Ringer sound: {ringer_sound or '(none - GPIO toggle only)'}")
         print()
@@ -166,6 +170,7 @@ class RealPhoneTestHarness:
             device_name=self.audio_config["device_name"],
             input_gain=self.audio_config["input_gain"],
             output_volume=self.audio_config["output_volume"],
+            noise_gate_threshold=self.audio_config["noise_gate"],
         )
         self._usb_audio_auto_start = self.audio_config["auto_start"]
 
