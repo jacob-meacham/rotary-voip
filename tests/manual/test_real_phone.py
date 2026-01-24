@@ -332,20 +332,25 @@ class RealPhoneTestHarness:
         def _record_loop() -> None:
             """Background thread that records audio from VoIP to WAV file."""
             frames = []
+            raw_bytes = []  # Also capture raw bytes for debugging
             voip_sample_rate = 8000
-            frame_size = 160  # 20ms at 8kHz
+            frame_size = 160  # 160 bytes = 160 samples at 8-bit = 20ms at 8kHz
 
             print(f"→ Recording to: {self._recording_file}")
-            print("  Recording raw 8kHz μ-law audio from VoIP...")
+            print("  Recording 8kHz 8-bit unsigned linear PCM from pyVoIP...")
 
             while self._recording:
                 try:
-                    # Read μ-law audio from VoIP call
-                    ulaw_data = voip_call.read_audio(frame_size, blocking=True)
-                    if ulaw_data:
-                        # Convert μ-law to 16-bit PCM for WAV file
-                        pcm_data = audioop.ulaw2lin(ulaw_data, 2)
-                        frames.append(pcm_data)
+                    # read_audio returns 8-bit unsigned linear PCM (0x80 = silence)
+                    unsigned_8bit = voip_call.read_audio(frame_size, blocking=True)
+                    if unsigned_8bit:
+                        raw_bytes.append(unsigned_8bit)
+                        # Convert 8-bit unsigned -> 16-bit signed for WAV file
+                        # Subtract 128 to convert unsigned to signed
+                        signed_8bit = audioop.bias(unsigned_8bit, 1, -128)
+                        # Convert 8-bit to 16-bit
+                        pcm_16bit = audioop.lin2lin(signed_8bit, 1, 2)
+                        frames.append(pcm_16bit)
                 except Exception as e:
                     if self._recording:  # Only log if we weren't stopping
                         print(f"  Recording error: {e}")
@@ -363,6 +368,27 @@ class RealPhoneTestHarness:
                     duration = len(frames) * 0.02  # 20ms per frame
                     print(f"✓ Recording saved: {self._recording_file}")
                     print(f"  Duration: {duration:.1f}s, Frames: {len(frames)}")
+
+                    # Also save raw bytes for debugging
+                    raw_file = self._recording_file.replace(".wav", "_raw.bin")
+                    with open(raw_file, "wb") as rf:
+                        rf.write(b"".join(raw_bytes))
+                    print(f"  Raw 8-bit unsigned bytes saved to: {raw_file}")
+
+                    # Analyze raw bytes
+                    all_raw = b"".join(raw_bytes)
+                    from collections import Counter
+                    byte_counts = Counter(all_raw)
+                    print(f"\n  === Raw byte analysis (8-bit unsigned, 0x80=silence) ===")
+                    print(f"  Total bytes: {len(all_raw)}")
+                    print(f"  Unique byte values: {len(byte_counts)}")
+                    print(f"  Top 5 most common bytes:")
+                    for byte_val, count in byte_counts.most_common(5):
+                        pct = count / len(all_raw) * 100
+                        # Show signed equivalent (subtract 128)
+                        signed_val = byte_val - 128
+                        print(f"    0x{byte_val:02X} ({byte_val:3d}): {count:6d} ({pct:5.1f}%) = signed {signed_val:+4d}")
+
                 except Exception as e:
                     print(f"✗ Failed to save recording: {e}")
             else:
