@@ -15,6 +15,13 @@ from pyVoIP.VoIP import CallState as PyVoIPCallState
 from pyVoIP.VoIP import PhoneStatus as PyVoIPPhoneStatus
 from pyVoIP.VoIP import VoIPCall, VoIPPhone
 
+from rotary_phone.exceptions import (
+    SIPAuthenticationError,
+    SIPCallError,
+    SIPError,
+    SIPRegistrationError,
+    SIPTimeoutError,
+)
 from rotary_phone.sip.sip_client import CallState, SIPClient
 
 logger = logging.getLogger(__name__)
@@ -90,11 +97,15 @@ class PyVoIPClient(SIPClient):
                 # Monitor registration status
                 self._monitor_registration()
 
+            except SIPError:
+                self._phone = None
+                self._set_call_state(CallState.IDLE)
+                raise
             except Exception as e:
                 logger.error("Registration failed: %s", e)
                 self._phone = None
                 self._set_call_state(CallState.IDLE)
-                raise
+                raise SIPRegistrationError(str(e), server=server) from e
 
     def _parse_server_uri(self, uri: str) -> tuple[str, int]:
         """Parse SIP server URI to extract server and port.
@@ -197,11 +208,15 @@ class PyVoIPClient(SIPClient):
                 # Monitor call state
                 self._monitor_call_state()
 
+            except SIPError:
+                self._current_call = None
+                self._set_call_state(CallState.REGISTERED)
+                raise
             except Exception as e:
                 logger.error("Error making call: %s", e)
                 self._current_call = None
                 self._set_call_state(CallState.REGISTERED)
-                raise
+                raise SIPCallError(str(e), number=destination, direction="outbound") from e
 
     def _monitor_call_state(self) -> None:
         """Monitor call state in background thread."""

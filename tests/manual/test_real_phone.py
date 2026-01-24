@@ -12,6 +12,15 @@ Configuration:
         SIP_PASSWORD=your_password_here
         SIP_DID=+15551234567
 
+    Optional USB audio configuration:
+        AUDIO_DEVICE=USB          # Device name filter (default: auto-detect USB)
+        AUDIO_AUTO_START=1        # Auto-start USB audio when call connects
+        AUDIO_INPUT_GAIN=1.0      # Microphone gain (0.0-2.0)
+        AUDIO_OUTPUT_VOLUME=1.0   # Speaker volume (0.0-2.0)
+
+    Optional ringer configuration:
+        RINGER_SOUND_FILE=/path/to/ring.wav  # Sound file to play when ringing
+
 Run with:
     python -m tests.manual.test_real_phone
 
@@ -27,6 +36,7 @@ from unittest.mock import Mock
 
 from dotenv import load_dotenv
 
+from rotary_phone.audio.audio_handler import AudioHandler
 from rotary_phone.call_manager import CallManager, PhoneState
 from rotary_phone.hardware.dial_reader import DialReader
 from rotary_phone.hardware.gpio_abstraction import MockGPIO
@@ -69,6 +79,17 @@ def get_sip_config() -> dict[str, str]:
     }
 
 
+def get_audio_config() -> dict:
+    """Get audio configuration from environment variables."""
+    return {
+        "device_name": os.getenv("AUDIO_DEVICE"),  # None = auto-detect USB
+        "auto_start": os.getenv("AUDIO_AUTO_START", "").lower() in ("1", "true", "yes"),
+        "input_gain": float(os.getenv("AUDIO_INPUT_GAIN", "1.0")),
+        "output_volume": float(os.getenv("AUDIO_OUTPUT_VOLUME", "1.0")),
+        "ringer_sound_file": os.getenv("RINGER_SOUND_FILE"),  # None = GPIO toggle only
+    }
+
+
 class RealPhoneTestHarness:
     """Interactive test harness for phone system with real SIP."""
 
@@ -76,10 +97,21 @@ class RealPhoneTestHarness:
         """Initialize the test harness with mock GPIO and real SIP."""
         self.gpio = MockGPIO()
         self.sip_config = get_sip_config()
+        self.audio_config = get_audio_config()
 
         print(f"SIP Server: {self.sip_config['server']}:{self.sip_config['port']}")
         print(f"SIP Username: {self.sip_config['username']}")
         print(f"DID: {self.sip_config['did']}")
+        print()
+
+        # Audio configuration
+        print("Audio Configuration:")
+        print(f"  Device:       {self.audio_config['device_name'] or 'auto-detect USB'}")
+        print(f"  Auto-start:   {'YES' if self.audio_config['auto_start'] else 'NO'}")
+        print(f"  Input gain:   {self.audio_config['input_gain']:.1f}")
+        print(f"  Output vol:   {self.audio_config['output_volume']:.1f}")
+        ringer_sound = self.audio_config['ringer_sound_file']
+        print(f"  Ringer sound: {ringer_sound or '(none - GPIO toggle only)'}")
         print()
 
         # Create mock config
@@ -96,7 +128,12 @@ class RealPhoneTestHarness:
         # Create hardware components with MockGPIO
         self.hook_monitor = HookMonitor(gpio=self.gpio)
         self.dial_reader = DialReader(gpio=self.gpio)
-        self.ringer = Ringer(gpio=self.gpio, ring_on_duration=2.0, ring_off_duration=4.0)
+        self.ringer = Ringer(
+            gpio=self.gpio,
+            ring_on_duration=2.0,
+            ring_off_duration=4.0,
+            sound_file=self.audio_config["ringer_sound_file"],
+        )
 
         # Create REAL SIP client
         self.sip_client = PyVoIPClient()
@@ -115,9 +152,17 @@ class RealPhoneTestHarness:
         self._monitor_thread = None
         self._monitor_running = False
 
-        # Audio playback control
+        # Audio file playback control
         self._stop_audio = threading.Event()
         self._audio_thread = None
+
+        # USB audio handler for bidirectional audio during calls
+        self._audio_handler = AudioHandler(
+            device_name=self.audio_config["device_name"],
+            input_gain=self.audio_config["input_gain"],
+            output_volume=self.audio_config["output_volume"],
+        )
+        self._usb_audio_auto_start = self.audio_config["auto_start"]
 
         # Start the system
         print("Starting phone system...")
@@ -151,11 +196,15 @@ class RealPhoneTestHarness:
             # Detect call answered
             elif current_state == PhoneState.CONNECTED and self._last_state == PhoneState.RINGING:
                 print("\n✓ Call answered and connected!")
+                if self._usb_audio_auto_start:
+                    self._auto_start_usb_audio()
                 print()
 
             # Detect call connected (outgoing)
             elif current_state == PhoneState.CONNECTED and self._last_state == PhoneState.CALLING:
                 print("\n✓ Outgoing call connected!")
+                if self._usb_audio_auto_start:
+                    self._auto_start_usb_audio()
                 print()
 
             # Detect call ended
@@ -164,6 +213,10 @@ class RealPhoneTestHarness:
                 PhoneState.CALLING,
                 PhoneState.RINGING,
             ):
+                # Stop USB audio if running
+                if self._audio_handler.is_running():
+                    self._audio_handler.stop()
+                    print("  USB audio stopped")
                 print("\n✓ Call ended")
                 print()
 
@@ -175,7 +228,53 @@ class RealPhoneTestHarness:
         self._monitor_running = False
         if self._monitor_thread:
             self._monitor_thread.join(timeout=1.0)
+        # Stop USB audio if running
+        if self._audio_handler.is_running():
+            self._audio_handler.stop()
         self.call_manager.stop()
+
+    def _auto_start_usb_audio(self) -> None:
+        """Auto-start USB audio when call connects (if enabled)."""
+        voip_call = self.sip_client.get_current_call()
+        if voip_call and not self._audio_handler.is_running():
+            try:
+                self._audio_handler.start(voip_call)
+                print("  USB audio auto-started (mic + speaker)")
+            except Exception as e:
+                print(f"  ✗ Failed to auto-start USB audio: {e}")
+
+    def start_usb_audio(self) -> None:
+        """Start USB audio for the current call (bidirectional mic + speaker)."""
+        if self._audio_handler.is_running():
+            print("  USB audio already running")
+            return
+
+        state = self.call_manager.get_state()
+        if state != PhoneState.CONNECTED:
+            print(f"  ✗ Cannot start USB audio - not in a call (state: {state.value})")
+            return
+
+        voip_call = self.sip_client.get_current_call()
+        if not voip_call:
+            print("  ✗ No active VoIP call found")
+            return
+
+        try:
+            print("→ Starting USB audio (mic + speaker)...")
+            self._audio_handler.start(voip_call)
+            print("✓ USB audio started - you can now speak and listen")
+        except Exception as e:
+            print(f"✗ Failed to start USB audio: {e}")
+
+    def stop_usb_audio(self) -> None:
+        """Stop USB audio."""
+        if not self._audio_handler.is_running():
+            print("  USB audio not running")
+            return
+
+        print("→ Stopping USB audio...")
+        self._audio_handler.stop()
+        print("✓ USB audio stopped")
 
     def hook_off(self) -> None:
         """Simulate picking up the phone."""
@@ -274,6 +373,7 @@ class RealPhoneTestHarness:
         sip_state = self.sip_client.get_call_state()
         hook_state = self.hook_monitor.get_state()
         ringing = self.ringer.is_ringing()
+        usb_audio_running = self._audio_handler.is_running()
 
         print("\n" + "=" * 60)
         print("PHONE SYSTEM STATUS")
@@ -283,6 +383,7 @@ class RealPhoneTestHarness:
         print(f"SIP State:      {sip_state.value}")
         print(f"Dialed Number:  {dialed or '(none)'}")
         print(f"Ringing:        {'YES' if ringing else 'NO'}")
+        print(f"USB Audio:      {'ACTIVE (mic + speaker)' if usb_audio_running else 'OFF'}")
         if error:
             print(f"Error:          {error}")
         print("=" * 60 + "\n")
@@ -296,8 +397,16 @@ def print_menu() -> None:
     print("  d     - Hang up phone (hook on)")
     print("  0-9   - Dial single digit")
     print("  c     - Call a number (dial complete number)")
-    print("  a     - Send audio file (WAV) during call")
-    print("  x     - Stop audio playback")
+    print()
+    print("USB AUDIO (bidirectional mic + speaker):")
+    print("  m     - Start USB audio (mic + speaker for real conversation)")
+    print("  n     - Stop USB audio")
+    print()
+    print("AUDIO FILE PLAYBACK:")
+    print("  a     - Send audio file (WAV) to call")
+    print("  x     - Stop audio file playback")
+    print()
+    print("OTHER:")
     print("  s     - Show status")
     print("  h     - Show this help")
     print("  q     - Quit")
@@ -306,7 +415,7 @@ def print_menu() -> None:
     print("  - To receive calls, have someone call your DID")
     print("  - To make calls, pick up (u), dial digits, then wait 3 seconds")
     print("  - Or use 'c' command to dial a complete number at once")
-    print("  - Audio will stop if you press any key while it's playing")
+    print("  - Set AUDIO_AUTO_START=1 in .env.test to auto-start USB audio")
     print("─" * 60)
 
 
@@ -358,6 +467,10 @@ def main() -> None:
                         harness.show_status()
                     else:
                         print("  ✗ No number entered")
+                elif cmd == "m":
+                    harness.start_usb_audio()
+                elif cmd == "n":
+                    harness.stop_usb_audio()
                 elif cmd == "a":
                     file_path = input("  Enter WAV file path: ").strip()
                     if file_path:

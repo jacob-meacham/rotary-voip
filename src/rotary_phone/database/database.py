@@ -3,7 +3,7 @@
 import logging
 import sqlite3
 from contextlib import contextmanager
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any, Dict, Generator, List, Optional
 
@@ -243,7 +243,7 @@ class Database:
             - total_duration_seconds: Sum of all call durations
             - avg_duration_seconds: Average call duration (completed calls only)
         """
-        cutoff = (datetime.utcnow() - timedelta(days=days)).isoformat()
+        cutoff = (datetime.now(UTC) - timedelta(days=days)).isoformat()
 
         with self._connection() as conn:
             # Total calls
@@ -309,7 +309,7 @@ class Database:
         Returns:
             Number of records deleted
         """
-        cutoff = (datetime.utcnow() - timedelta(days=days)).isoformat()
+        cutoff = (datetime.now(UTC) - timedelta(days=days)).isoformat()
 
         with self._connection() as conn:
             cursor = conn.execute(

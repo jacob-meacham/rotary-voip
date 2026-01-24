@@ -15,6 +15,7 @@ dependencies = [
     "psutil>=5.9.0",
     "pyaudio>=0.2.13",
     "bcrypt>=5.0.0",
+    "slowapi>=0.1.9",
     "audioop-lts>=0.2.1; python_version >= '3.13'",
     "lgpio>=0.2.2.0; platform_machine == 'aarch64' or platform_machine == 'armv7l'",
 ]
@@ -91,7 +92,7 @@ exclude = [
 [[tool.mypy.overrides]]
 module = "tests.*"
 disallow_untyped_defs = false
-check_untyped_defs = false
+check_untyped_defs = true  # Enable type checking when types are provided
 
 [tool.pylint.main]
 max-line-length = 100

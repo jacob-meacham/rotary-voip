@@ -256,6 +256,40 @@ def test_allowlist_wildcard() -> None:
         Path(config_path).unlink()
 
 
+def test_allowlist_normalizes_phone_numbers() -> None:
+    """Test that allowlist comparison normalizes phone number formats.
+
+    This handles the case where SIP caller IDs come without country code
+    (e.g., '4065551234') but allowlist has full format ('+14065551234').
+    """
+    config_dict = get_minimal_valid_config()
+    config_dict["allowlist"] = ["+14065551234", "+12065555678"]
+
+    config_path = create_temp_config(config_dict)
+
+    try:
+        config = ConfigManager(user_config_path=config_path)
+
+        # Test exact match still works
+        assert config.is_allowed("+14065551234") is True
+
+        # Test without country code (SIP caller ID format)
+        assert config.is_allowed("4065551234") is True
+
+        # Test with 1 prefix but no +
+        assert config.is_allowed("14065551234") is True
+
+        # Test number not in allowlist (different digits)
+        assert config.is_allowed("4065559999") is False
+        assert config.is_allowed("+14065559999") is False
+
+        # Test with formatting characters
+        assert config.is_allowed("(406) 555-1234") is True
+        assert config.is_allowed("406-555-1234") is True
+    finally:
+        Path(config_path).unlink()
+
+
 def test_get_section_configs() -> None:
     """Test helper methods for getting config sections."""
     config_dict = get_minimal_valid_config()

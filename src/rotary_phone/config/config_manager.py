@@ -14,8 +14,10 @@ T = TypeVar("T")
 logger = logging.getLogger(__name__)
 
 
-class ConfigError(Exception):
-    """Raised when configuration is invalid."""
+# Re-export ConfigError from exceptions module for backward compatibility
+from rotary_phone.exceptions import ConfigError
+
+__all__ = ["ConfigError", "ConfigManager"]
 
 
 class ConfigManager:
@@ -187,8 +189,34 @@ class ConfigManager:
         speed_dial: Dict[str, str] = self.get("speed_dial", {})
         return speed_dial.get(code)
 
+    @staticmethod
+    def _normalize_phone_number(number: str) -> str:
+        """Normalize a phone number for comparison.
+
+        Strips formatting characters (+, -, spaces, parentheses) and removes
+        leading country code '1' for US/Canada numbers to ensure consistent
+        matching between formats like '+14065551234' and '4065551234'.
+
+        Args:
+            number: Phone number to normalize
+
+        Returns:
+            Normalized phone number (digits only, no leading '1' for 11-digit numbers)
+        """
+        # Remove all non-digit characters
+        digits = "".join(c for c in number if c.isdigit())
+
+        # If it's an 11-digit US/Canada number starting with 1, strip the leading 1
+        if len(digits) == 11 and digits.startswith("1"):
+            digits = digits[1:]
+
+        return digits
+
     def is_allowed(self, number: str) -> bool:
         """Check if a phone number is in the allowlist.
+
+        Compares normalized versions of phone numbers to handle different formats
+        (e.g., '+14065551234' matches '4065551234').
 
         Args:
             number: Phone number to check
@@ -202,8 +230,15 @@ class ConfigManager:
         if "*" in allowlist:
             return True
 
-        # Check if number is in allowlist
-        return number in allowlist
+        # Normalize the input number
+        normalized_input = self._normalize_phone_number(number)
+
+        # Check if normalized number matches any normalized allowlist entry
+        for allowed in allowlist:
+            if self._normalize_phone_number(allowed) == normalized_input:
+                return True
+
+        return False
 
     def get_sip_config(self) -> Dict[str, Any]:
         """Get SIP configuration.

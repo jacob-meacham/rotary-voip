@@ -1,7 +1,7 @@
 """Tests for the authentication module."""
 
 import tempfile
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from unittest.mock import MagicMock, patch
 
 import bcrypt
@@ -30,7 +30,7 @@ def test_user(temp_db: Database) -> User:
     user = User(
         username="testuser",
         password_hash=password_hash,
-        created_at=datetime.utcnow(),
+        created_at=datetime.now(UTC),
     )
     user_id = temp_db.add_user(user)
     user.id = user_id
@@ -88,7 +88,7 @@ class TestSessionStore:
 
         # Manually expire the session
         _, _ = store._sessions[session_id]
-        store._sessions[session_id] = (1, datetime.utcnow() - timedelta(minutes=5))
+        store._sessions[session_id] = (1, datetime.now(UTC) - timedelta(minutes=5))
 
         user_id = store.get_user_id(session_id)
         assert user_id is None
@@ -133,8 +133,8 @@ class TestSessionStore:
         session3 = store.create_session(user_id=3)
 
         # Manually expire session1 and session2
-        store._sessions[session1] = (1, datetime.utcnow() - timedelta(minutes=5))
-        store._sessions[session2] = (2, datetime.utcnow() - timedelta(minutes=10))
+        store._sessions[session1] = (1, datetime.now(UTC) - timedelta(minutes=5))
+        store._sessions[session2] = (2, datetime.now(UTC) - timedelta(minutes=10))
 
         store.cleanup_expired()
 
@@ -217,7 +217,7 @@ class TestAuthManager:
         user_without_id = User(
             username="noIdUser",
             password_hash=password_hash,
-            created_at=datetime.utcnow(),
+            created_at=datetime.now(UTC),
             id=None,
         )
         auth.database.get_user_by_username = MagicMock(return_value=user_without_id)
@@ -270,7 +270,7 @@ class TestAuthManager:
         # Manually expire the session
         auth.sessions._sessions[session_id] = (
             test_user.id,
-            datetime.utcnow() - timedelta(minutes=5),
+            datetime.now(UTC) - timedelta(minutes=5),
         )
 
         user = auth.get_current_user(session_id)

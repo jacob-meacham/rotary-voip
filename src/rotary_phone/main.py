@@ -311,6 +311,8 @@ def _start_web_server(
 
     host = config.get("web.host", "0.0.0.0")
     port = config.get("web.port", 7474)
+    ssl_certfile = config.get("web.ssl_certfile")
+    ssl_keyfile = config.get("web.ssl_keyfile")
 
     web_app = create_app(
         call_manager=call_manager,
@@ -320,18 +322,24 @@ def _start_web_server(
     )
 
     def run_web_server() -> None:
-        uvicorn.run(
-            web_app,
-            host=host,
-            port=port,
-            log_level="warning",  # Reduce uvicorn logging noise
-        )
+        uvicorn_config: Dict[str, Any] = {
+            "host": host,
+            "port": port,
+            "log_level": "warning",  # Reduce uvicorn logging noise
+        }
+        # Add SSL configuration if both cert and key are provided
+        if ssl_certfile and ssl_keyfile:
+            uvicorn_config["ssl_certfile"] = ssl_certfile
+            uvicorn_config["ssl_keyfile"] = ssl_keyfile
+        uvicorn.run(web_app, **uvicorn_config)
 
     web_thread = Thread(target=run_web_server, daemon=True, name="WebServer")
     web_thread.start()
 
+    protocol = "https" if ssl_certfile and ssl_keyfile else "http"
     logger.info(
-        "  - Web admin interface started at http://%s:%d",
+        "  - Web admin interface started at %s://%s:%d",
+        protocol,
         host,
         port,
     )

@@ -3,7 +3,7 @@
 import logging
 import threading
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Optional
 
 from rotary_phone.database.database import Database
@@ -67,7 +67,7 @@ class CallLogger:
                 logger.warning("Starting new call while previous call still tracked, discarding")
 
             self._current_call = PendingCall(
-                timestamp=datetime.utcnow(),
+                timestamp=datetime.now(UTC),
                 direction="outbound",
                 dialed_number=dialed_number,
                 destination=destination,
@@ -93,7 +93,7 @@ class CallLogger:
                 logger.warning("Starting new call while previous call still tracked, discarding")
 
             self._current_call = PendingCall(
-                timestamp=datetime.utcnow(),
+                timestamp=datetime.now(UTC),
                 direction="inbound",
                 caller_id=caller_id,
             )
@@ -109,7 +109,7 @@ class CallLogger:
                 logger.warning("Call answered but no call being tracked")
                 return
 
-            self._current_call.answered_at = datetime.utcnow()
+            self._current_call.answered_at = datetime.now(UTC)
             logger.debug("Call answered at %s", self._current_call.answered_at)
 
     def on_call_ended(self, status: str, error_message: Optional[str] = None) -> None:
@@ -126,7 +126,7 @@ class CallLogger:
                 logger.warning("Call ended but no call being tracked")
                 return
 
-            ended_at = datetime.utcnow()
+            ended_at = datetime.now(UTC)
             pending = self._current_call
             self._current_call = None
 
@@ -180,7 +180,7 @@ class CallLogger:
         """
         with self._lock:
             call_log = CallLog(
-                timestamp=datetime.utcnow(),
+                timestamp=datetime.now(UTC),
                 direction="outbound",
                 dialed_number=dialed_number,
                 destination=dialed_number,  # Same as dialed since it was rejected

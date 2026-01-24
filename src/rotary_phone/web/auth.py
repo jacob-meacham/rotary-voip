@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 import secrets
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from typing import Callable, Coroutine, Dict, Optional, Any
 
 import bcrypt
@@ -43,7 +43,7 @@ class SessionStore:
             Session ID (secure random token)
         """
         session_id = secrets.token_urlsafe(32)
-        expiry = datetime.utcnow() + self._timeout
+        expiry = datetime.now(UTC) + self._timeout
         self._sessions[session_id] = (user_id, expiry)
         logger.info("Created session for user_id=%d", user_id)
         return session_id
@@ -63,13 +63,13 @@ class SessionStore:
         user_id, expiry = self._sessions[session_id]
 
         # Check if expired
-        if datetime.utcnow() > expiry:
+        if datetime.now(UTC) > expiry:
             del self._sessions[session_id]
             logger.debug("Session expired: %s", session_id)
             return None
 
         # Renew session (sliding window)
-        new_expiry = datetime.utcnow() + self._timeout
+        new_expiry = datetime.now(UTC) + self._timeout
         self._sessions[session_id] = (user_id, new_expiry)
 
         return user_id
@@ -86,7 +86,7 @@ class SessionStore:
 
     def cleanup_expired(self) -> None:
         """Remove all expired sessions."""
-        now = datetime.utcnow()
+        now = datetime.now(UTC)
         expired = [sid for sid, (_, expiry) in self._sessions.items() if now > expiry]
         for sid in expired:
             del self._sessions[sid]
