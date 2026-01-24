@@ -13,9 +13,16 @@ from typing import Any, Optional, Tuple
 logger = logging.getLogger(__name__)
 
 # Audio format constants for G.711 μ-law (PCMU)
-SAMPLE_RATE = 8000  # 8 kHz
-FRAME_SIZE = 160  # 160 samples = 20ms at 8kHz
+VOIP_SAMPLE_RATE = 8000  # 8 kHz for VoIP
+VOIP_FRAME_SIZE = 160  # 160 samples = 20ms at 8kHz
 CHANNELS = 1  # Mono
+
+# Backward compatibility aliases
+SAMPLE_RATE = VOIP_SAMPLE_RATE
+FRAME_SIZE = VOIP_FRAME_SIZE
+
+# Common sample rates to try if device doesn't support 8kHz
+FALLBACK_SAMPLE_RATES = [8000, 48000, 44100, 16000]
 
 
 class AudioError(Exception):
@@ -70,6 +77,14 @@ class AudioHandler:  # pylint: disable=too-many-instance-attributes
         self._output_device_index: Optional[int] = None
         self._voip_call: Any = None
 
+        # Device sample rate (may differ from VoIP rate, requiring resampling)
+        self._device_sample_rate: int = VOIP_SAMPLE_RATE
+        self._device_frame_size: int = VOIP_FRAME_SIZE
+
+        # Resampling state for audioop.ratecv()
+        self._capture_resample_state: Any = None
+        self._playback_resample_state: Any = None
+
         self._capture_thread: Optional[threading.Thread] = None
         self._playback_thread: Optional[threading.Thread] = None
         self._stop_event = threading.Event()
@@ -120,6 +135,24 @@ class AudioHandler:  # pylint: disable=too-many-instance-attributes
             except AudioDeviceNotFoundError:
                 self._cleanup_pyaudio()
                 raise
+
+            # Find a supported sample rate
+            self._device_sample_rate = self._find_supported_sample_rate()
+            if self._device_sample_rate != VOIP_SAMPLE_RATE:
+                # Calculate frame size for device rate (maintain 20ms frames)
+                self._device_frame_size = int(self._device_sample_rate * 0.02)
+                logger.info(
+                    "Using device sample rate %d Hz (will resample to/from %d Hz)",
+                    self._device_sample_rate,
+                    VOIP_SAMPLE_RATE,
+                )
+            else:
+                self._device_frame_size = VOIP_FRAME_SIZE
+                logger.info("Using native VoIP sample rate %d Hz", VOIP_SAMPLE_RATE)
+
+            # Reset resampling state
+            self._capture_resample_state = None
+            self._playback_resample_state = None
 
             # Start capture thread
             self._capture_thread = threading.Thread(
@@ -266,40 +299,99 @@ class AudioHandler:  # pylint: disable=too-many-instance-attributes
 
         return input_idx, output_idx
 
+    def _find_supported_sample_rate(self) -> int:
+        """Find a sample rate supported by both input and output devices.
+
+        Tries VOIP_SAMPLE_RATE (8kHz) first, then falls back to common rates.
+
+        Returns:
+            Supported sample rate in Hz
+        """
+        import pyaudio  # type: ignore[import-untyped]  # pylint: disable=import-outside-toplevel
+
+        for rate in FALLBACK_SAMPLE_RATES:
+            try:
+                # Test if input device supports this rate
+                if self._input_device_index is not None:
+                    input_supported = self._pyaudio.is_format_supported(
+                        rate,
+                        input_device=self._input_device_index,
+                        input_channels=CHANNELS,
+                        input_format=pyaudio.paInt16,
+                    )
+                else:
+                    input_supported = True
+
+                # Test if output device supports this rate
+                if self._output_device_index is not None:
+                    output_supported = self._pyaudio.is_format_supported(
+                        rate,
+                        output_device=self._output_device_index,
+                        output_channels=CHANNELS,
+                        output_format=pyaudio.paInt16,
+                    )
+                else:
+                    output_supported = True
+
+                if input_supported and output_supported:
+                    logger.debug("Sample rate %d Hz is supported", rate)
+                    return rate
+
+            except ValueError:
+                logger.debug("Sample rate %d Hz not supported", rate)
+                continue
+
+        # If nothing worked, return 8kHz and hope for the best
+        logger.warning("Could not detect supported sample rate, defaulting to %d Hz", VOIP_SAMPLE_RATE)
+        return VOIP_SAMPLE_RATE
+
     def _capture_loop(self) -> None:
         """Background thread: capture microphone audio and send to VoIP.
 
         Flow:
-        1. Open PyAudio input stream (16-bit PCM at 8kHz)
-        2. Read 160 samples (20ms frame)
+        1. Open PyAudio input stream (16-bit PCM at device sample rate)
+        2. Read samples (20ms frame)
         3. Apply input gain
-        4. Convert 16-bit linear PCM to 8-bit μ-law
-        5. Send to VoIPCall.write_audio()
+        4. Resample to 8kHz if needed
+        5. Convert 16-bit linear PCM to 8-bit μ-law
+        6. Send to VoIPCall.write_audio()
         """
         import pyaudio  # type: ignore[import-untyped]  # pylint: disable=import-outside-toplevel
 
         stream = None
+        resample_state = None
         try:
             stream = self._pyaudio.open(
                 format=pyaudio.paInt16,  # 16-bit for capture
                 channels=CHANNELS,
-                rate=SAMPLE_RATE,
+                rate=self._device_sample_rate,
                 input=True,
                 input_device_index=self._input_device_index,
-                frames_per_buffer=FRAME_SIZE,
+                frames_per_buffer=self._device_frame_size,
             )
-            logger.debug("Capture stream opened")
+            logger.debug("Capture stream opened at %d Hz", self._device_sample_rate)
 
             while not self._stop_event.is_set():
                 try:
-                    # Read 160 samples of 16-bit audio (320 bytes)
-                    pcm_data = stream.read(FRAME_SIZE, exception_on_overflow=False)
+                    # Read samples of 16-bit audio
+                    pcm_data = stream.read(self._device_frame_size, exception_on_overflow=False)
 
                     # Apply input gain if not 1.0
                     if self._input_gain != 1.0:
                         pcm_data = audioop.mul(pcm_data, 2, self._input_gain)
 
-                    # Convert 16-bit linear PCM to 8-bit μ-law (160 bytes output)
+                    # Resample to VoIP rate (8kHz) if needed
+                    if self._device_sample_rate != VOIP_SAMPLE_RATE:
+                        pcm_data, resample_state = audioop.ratecv(
+                            pcm_data,
+                            2,  # sample width (16-bit = 2 bytes)
+                            CHANNELS,
+                            self._device_sample_rate,
+                            VOIP_SAMPLE_RATE,
+                            resample_state,
+                        )
+
+                    # Convert 16-bit linear PCM to 8-bit μ-law
                     ulaw_data = audioop.lin2ulaw(pcm_data, 2)
 
                     # Send to VoIP call
@@ -327,29 +419,33 @@ class AudioHandler:  # pylint: disable=too-many-instance-attributes
                     logger.warning("Error closing capture stream: %s", e)
             logger.debug("Capture thread ended")
 
-    def _process_playback_frame(self, stream: Any) -> None:
+    def _process_playback_frame(self, stream: Any, resample_state: Any) -> Any:
         """Process a single playback frame from the VoIP call.
 
         Args:
             stream: PyAudio output stream to write to
+            resample_state: Current resampling state (for audioop.ratecv)
+
+        Returns:
+            Updated resample_state
         """
         # Read μ-law audio from VoIP call
         if not self._voip_call:
             # No active call, brief sleep
             time.sleep(0.02)
-            return
+            return resample_state
 
         try:
             # read_audio returns μ-law encoded bytes
-            ulaw_data = self._voip_call.read_audio(FRAME_SIZE, blocking=True)
+            ulaw_data = self._voip_call.read_audio(VOIP_FRAME_SIZE, blocking=True)
         except Exception as e:
             logger.debug("Error reading audio: %s", e)
             # Brief sleep to avoid busy loop on error
             time.sleep(0.02)
-            return
+            return resample_state
 
         if not ulaw_data:
-            return
+            return resample_state
 
         # Convert 8-bit μ-law to 16-bit linear PCM
         pcm_data = audioop.ulaw2lin(ulaw_data, 2)
@@ -358,36 +454,50 @@ class AudioHandler:  # pylint: disable=too-many-instance-attributes
         if self._output_volume != 1.0:
             pcm_data = audioop.mul(pcm_data, 2, self._output_volume)
 
+        # Resample from VoIP rate (8kHz) to device rate if needed
+        if self._device_sample_rate != VOIP_SAMPLE_RATE:
+            pcm_data, resample_state = audioop.ratecv(
+                pcm_data,
+                2,  # sample width (16-bit = 2 bytes)
+                CHANNELS,
+                VOIP_SAMPLE_RATE,
+                self._device_sample_rate,
+                resample_state,
+            )
+
         # Play to speaker
         stream.write(pcm_data)
+        return resample_state
 
     def _playback_loop(self) -> None:
         """Background thread: receive audio from VoIP and play to speaker.
 
         Flow:
-        1. Open PyAudio output stream (16-bit PCM at 8kHz)
+        1. Open PyAudio output stream (16-bit PCM at device sample rate)
         2. Call VoIPCall.read_audio(160) to get μ-law audio
         3. Convert 8-bit μ-law to 16-bit linear PCM
         4. Apply output volume
-        5. Write to speaker
+        5. Resample to device rate if needed
+        6. Write to speaker
         """
         import pyaudio  # type: ignore[import-untyped]  # pylint: disable=import-outside-toplevel
 
         stream = None
+        resample_state = None
         try:
             stream = self._pyaudio.open(
                 format=pyaudio.paInt16,  # 16-bit for playback
                 channels=CHANNELS,
-                rate=SAMPLE_RATE,
+                rate=self._device_sample_rate,
                 output=True,
                 output_device_index=self._output_device_index,
-                frames_per_buffer=FRAME_SIZE,
+                frames_per_buffer=self._device_frame_size,
             )
-            logger.debug("Playback stream opened")
+            logger.debug("Playback stream opened at %d Hz", self._device_sample_rate)
 
             while not self._stop_event.is_set():
                 try:
-                    self._process_playback_frame(stream)
+                    resample_state = self._process_playback_frame(stream, resample_state)
                 except IOError as e:
                     # Handle buffer underflow gracefully
                     logger.debug("Playback buffer underflow: %s", e)
