@@ -3,22 +3,30 @@
 This module provides the AudioHandler class which bridges USB audio devices
 with pyVoIP's read_audio()/write_audio() methods for real-time call audio.
 
-pyVoIP's read_audio() returns LINEAR audio (already decoded from μ-law internally)
-and write_audio() expects LINEAR audio (encodes to μ-law internally).
-The format is 8-bit unsigned PCM where 128 (0x80) is silence.
+We install pyvoip_patches at import time so read_audio()/write_audio() carry
+raw μ-law bytes instead of pyVoIP's lossy 8-bit linear intermediate. The
+handler does the μ-law ↔ 16-bit signed PCM conversion itself, preserving the
+full dynamic range μ-law actually carries.
 """
 
 import audioop  # pylint: disable=deprecated-module
 import logging
 import threading
 import time
-from typing import Any, Optional, Tuple
+from typing import Any, Callable, Optional, Tuple
+
+import numpy as np
+from scipy import signal as scipy_signal  # type: ignore[import-untyped]
+
+from rotary_phone.audio.pyvoip_patches import apply_patches as _apply_pyvoip_patches
+
+_apply_pyvoip_patches()
 
 logger = logging.getLogger(__name__)
 
 # Audio format constants
 VOIP_SAMPLE_RATE = 8000  # 8 kHz for VoIP
-VOIP_FRAME_SIZE = 160  # 160 samples = 20ms at 8kHz
+VOIP_FRAME_SIZE = 160  # 160 samples = 20ms at 8kHz (matches pyVoIP's RTP cadence)
 CHANNELS = 1  # Mono
 
 # Backward compatibility aliases
@@ -46,11 +54,12 @@ class AudioDeviceNotFoundError(AudioError):
 class AudioHandler:  # pylint: disable=too-many-instance-attributes
     """Handles bidirectional USB audio for VoIP calls.
 
-    Captures microphone audio, converts format, and sends via VoIPCall.write_audio().
-    Receives audio via VoIPCall.read_audio(), converts format, and plays to speaker.
+    Captures microphone audio, encodes to μ-law, and sends via
+    VoIPCall.write_audio(). Receives μ-law audio via VoIPCall.read_audio(),
+    decodes to 16-bit signed PCM, and plays to speaker.
 
-    pyVoIP uses 8-bit unsigned linear PCM (0x80 = silence).
-    PyAudio uses 16-bit signed linear PCM (0 = silence).
+    With the pyVoIP patches applied, read_audio()/write_audio() carry μ-law
+    bytes; everything in this handler is 16-bit signed linear PCM internally.
 
     The handler auto-detects USB audio devices by looking for "USB" in
     the device name. An explicit device name can be specified to override
@@ -62,7 +71,7 @@ class AudioHandler:  # pylint: disable=too-many-instance-attributes
         device_name: Optional[str] = None,
         input_gain: float = 1.0,
         output_volume: float = 1.0,
-        noise_gate_threshold: int = 5,
+        noise_gate_threshold: int = 0,
     ) -> None:
         """Initialize the audio handler.
 
@@ -70,9 +79,10 @@ class AudioHandler:  # pylint: disable=too-many-instance-attributes
             device_name: Explicit device name to use (auto-detect if None)
             input_gain: Microphone gain multiplier (0.0-2.0, 1.0 = no change)
             output_volume: Speaker volume multiplier (0.0-2.0, 1.0 = no change)
-            noise_gate_threshold: Samples within ±threshold of silence (128) are
-                                  zeroed to reduce quantization noise hiss.
-                                  Set to 0 to disable. Default 5 removes most hiss.
+            noise_gate_threshold: 16-bit sample magnitude below which incoming
+                                  audio is zeroed (e.g. 256 ≈ -42 dBFS). Set to
+                                  0 (default) to disable; μ-law decoded to 16-bit
+                                  usually sounds clean without gating.
 
         Raises:
             ValueError: If gain or volume is out of range
@@ -96,7 +106,9 @@ class AudioHandler:  # pylint: disable=too-many-instance-attributes
         self._device_sample_rate: int = VOIP_SAMPLE_RATE
         self._device_frame_size: int = VOIP_FRAME_SIZE
 
-        # Resampling state for audioop.ratecv()
+        # Resampling: scipy polyphase if integer ratio, audioop.ratecv otherwise
+        self._resample_down: Optional[Callable[[bytes], bytes]] = None
+        self._resample_up: Optional[Callable[[bytes], bytes]] = None
         self._capture_resample_state: Any = None
         self._playback_resample_state: Any = None
 
@@ -154,8 +166,9 @@ class AudioHandler:  # pylint: disable=too-many-instance-attributes
 
             # Find a supported sample rate
             self._device_sample_rate = self._find_supported_sample_rate()
+
             if self._device_sample_rate != VOIP_SAMPLE_RATE:
-                # Calculate frame size for device rate (maintain 20ms frames)
+                # 20ms frames at the device rate
                 self._device_frame_size = int(self._device_sample_rate * 0.02)
                 logger.info(
                     "Using device sample rate %d Hz (will resample to/from %d Hz)",
@@ -166,9 +179,10 @@ class AudioHandler:  # pylint: disable=too-many-instance-attributes
                 self._device_frame_size = VOIP_FRAME_SIZE
                 logger.info("Using native VoIP sample rate %d Hz", VOIP_SAMPLE_RATE)
 
-            # Reset resampling state
+            # Reset resampling state and set up resamplers
             self._capture_resample_state = None
             self._playback_resample_state = None
+            self._setup_resamplers()
 
             # Start capture thread
             self._capture_thread = threading.Thread(
@@ -361,32 +375,71 @@ class AudioHandler:  # pylint: disable=too-many-instance-attributes
         logger.warning("Could not detect supported sample rate, defaulting to %d Hz", VOIP_SAMPLE_RATE)
         return VOIP_SAMPLE_RATE
 
-    def _apply_noise_gate(self, data: bytes) -> bytes:
-        """Apply noise gate to 8-bit unsigned audio data.
+    def _setup_resamplers(self) -> None:
+        """Set up resampling functions based on rate ratio.
 
-        Samples within ±threshold of silence (128) are set to 128 (silence).
-        This reduces the audible hiss from 8-bit quantization noise.
+        For integer ratios (e.g. 48k:8k = 6:1) use scipy polyphase resampling,
+        which applies a proper FIR anti-aliasing filter. For non-integer ratios
+        fall back to audioop.ratecv (lower quality, simple low-pass).
+        """
+        if self._device_sample_rate == VOIP_SAMPLE_RATE:
+            self._resample_down = None
+            self._resample_up = None
+            return
+
+        if self._device_sample_rate % VOIP_SAMPLE_RATE == 0:
+            ratio = self._device_sample_rate // VOIP_SAMPLE_RATE
+            logger.info("Using scipy polyphase resampling (ratio %d:1)", ratio)
+            self._resample_down = self._make_scipy_downsampler(ratio)
+            self._resample_up = self._make_scipy_upsampler(ratio)
+        else:
+            logger.warning(
+                "Non-integer ratio %d/%d - falling back to audioop resampling",
+                self._device_sample_rate,
+                VOIP_SAMPLE_RATE,
+            )
+            self._resample_down = None
+            self._resample_up = None
+
+    def _make_scipy_downsampler(self, ratio: int) -> Callable[[bytes], bytes]:
+        """Create a scipy-based downsampler for 16-bit PCM."""
+
+        def downsample(pcm_data: bytes) -> bytes:
+            samples = np.frombuffer(pcm_data, dtype=np.int16).astype(np.float64)
+            downsampled = scipy_signal.decimate(samples, ratio, ftype="fir", zero_phase=False)
+            return bytes(downsampled.astype(np.int16).tobytes())
+
+        return downsample
+
+    def _make_scipy_upsampler(self, ratio: int) -> Callable[[bytes], bytes]:
+        """Create a scipy-based upsampler for 16-bit PCM."""
+
+        def upsample(pcm_data: bytes) -> bytes:
+            samples = np.frombuffer(pcm_data, dtype=np.int16).astype(np.float64)
+            upsampled = scipy_signal.resample_poly(samples, ratio, 1)
+            upsampled = np.clip(upsampled, -32768, 32767)
+            return bytes(upsampled.astype(np.int16).tobytes())
+
+        return upsample
+
+    def _apply_noise_gate(self, pcm16: bytes) -> bytes:
+        """Apply noise gate to 16-bit signed audio data.
+
+        Samples with absolute value below threshold are zeroed to suppress
+        low-level background noise. Operates per-sample (no envelope/hold),
+        so it is best used with very small thresholds — large values will
+        chop quiet speech.
 
         Args:
-            data: 8-bit unsigned audio bytes (128 = silence)
+            pcm16: 16-bit signed little-endian PCM bytes
 
         Returns:
-            Noise-gated audio bytes
+            Noise-gated PCM bytes
         """
         threshold = self._noise_gate_threshold
-        silence = 128
-        low = silence - threshold
-        high = silence + threshold
-
-        # Process each byte - set near-silence values to silence
-        result = bytearray(len(data))
-        for i, b in enumerate(data):
-            if low <= b <= high:
-                result[i] = silence
-            else:
-                result[i] = b
-
-        return bytes(result)
+        samples = np.frombuffer(pcm16, dtype=np.int16)
+        gated = np.where(np.abs(samples) < threshold, 0, samples).astype(np.int16)
+        return bytes(gated.tobytes())
 
     def _capture_loop(self) -> None:
         """Background thread: capture microphone audio and send to VoIP.
@@ -396,8 +449,8 @@ class AudioHandler:  # pylint: disable=too-many-instance-attributes
         2. Read 20ms frame
         3. Apply input gain
         4. Resample to 8kHz if needed
-        5. Convert 16-bit signed -> 8-bit unsigned for pyVoIP
-        6. Send to VoIPCall.write_audio()
+        5. Encode 16-bit signed PCM directly to μ-law
+        6. Send to VoIPCall.write_audio() (patched to pass μ-law through)
         """
         import pyaudio  # type: ignore[import-untyped]  # pylint: disable=import-outside-toplevel
 
@@ -425,25 +478,27 @@ class AudioHandler:  # pylint: disable=too-many-instance-attributes
 
                     # Resample to VoIP rate (8kHz) if needed
                     if self._device_sample_rate != VOIP_SAMPLE_RATE:
-                        pcm_data, resample_state = audioop.ratecv(
-                            pcm_data,
-                            2,  # sample width (16-bit = 2 bytes)
-                            CHANNELS,
-                            self._device_sample_rate,
-                            VOIP_SAMPLE_RATE,
-                            resample_state,
-                        )
+                        if self._resample_down is not None:
+                            pcm_data = self._resample_down(pcm_data)
+                        else:
+                            pcm_data, resample_state = audioop.ratecv(
+                                pcm_data,
+                                2,  # sample width (16-bit = 2 bytes)
+                                CHANNELS,
+                                self._device_sample_rate,
+                                VOIP_SAMPLE_RATE,
+                                resample_state,
+                            )
 
-                    # Convert 16-bit signed -> 8-bit unsigned for pyVoIP
-                    # pyVoIP expects 8-bit unsigned where 128 = silence
-                    linear_8bit = audioop.lin2lin(pcm_data, 2, 1)  # 16-bit to 8-bit signed
-                    # Convert signed to unsigned by adding 128 (XOR with 0x80)
-                    unsigned_8bit = audioop.bias(linear_8bit, 1, 128)
+                    # Encode 16-bit signed PCM to μ-law (8 bits per sample).
+                    # The pyvoip_patches make write_audio() pass these bytes
+                    # through unmodified to the RTP wire.
+                    ulaw_data = audioop.lin2ulaw(pcm_data, 2)
 
                     # Send to VoIP call
                     if self._voip_call:
                         try:
-                            self._voip_call.write_audio(unsigned_8bit)
+                            self._voip_call.write_audio(ulaw_data)
                         except Exception as e:
                             # Call may have ended
                             logger.debug("Error writing audio: %s", e)
@@ -482,27 +537,24 @@ class AudioHandler:  # pylint: disable=too-many-instance-attributes
             return resample_state
 
         try:
-            # read_audio returns 8-bit unsigned linear PCM (128 = silence)
-            unsigned_8bit = self._voip_call.read_audio(VOIP_FRAME_SIZE, blocking=True)
+            # With the patches applied, read_audio() returns raw μ-law bytes.
+            ulaw_data = self._voip_call.read_audio(VOIP_FRAME_SIZE, blocking=True)
         except Exception as e:
             logger.debug("Error reading audio: %s", e)
             # Brief sleep to avoid busy loop on error
             time.sleep(0.02)
             return resample_state
 
-        if not unsigned_8bit:
+        if not ulaw_data:
             return resample_state
 
-        # Apply noise gate to reduce quantization hiss
-        # Samples within ±threshold of silence (128) are set to silence
-        if self._noise_gate_threshold > 0:
-            unsigned_8bit = self._apply_noise_gate(unsigned_8bit)
+        # Decode μ-law to 16-bit signed linear PCM. width=2 preserves the
+        # full dynamic range μ-law carries (~13 effective bits).
+        pcm_data = audioop.ulaw2lin(ulaw_data, 2)
 
-        # Convert 8-bit unsigned -> 16-bit signed for PyAudio
-        # First convert unsigned to signed by subtracting 128 (bias)
-        signed_8bit = audioop.bias(unsigned_8bit, 1, -128)
-        # Then convert 8-bit to 16-bit
-        pcm_data = audioop.lin2lin(signed_8bit, 1, 2)
+        # Apply noise gate to suppress low-level caller-side noise
+        if self._noise_gate_threshold > 0:
+            pcm_data = self._apply_noise_gate(pcm_data)
 
         # Apply output volume if not 1.0
         if self._output_volume != 1.0:
@@ -510,14 +562,17 @@ class AudioHandler:  # pylint: disable=too-many-instance-attributes
 
         # Resample from VoIP rate (8kHz) to device rate if needed
         if self._device_sample_rate != VOIP_SAMPLE_RATE:
-            pcm_data, resample_state = audioop.ratecv(
-                pcm_data,
-                2,  # sample width (16-bit = 2 bytes)
-                CHANNELS,
-                VOIP_SAMPLE_RATE,
-                self._device_sample_rate,
-                resample_state,
-            )
+            if self._resample_up is not None:
+                pcm_data = self._resample_up(pcm_data)
+            else:
+                pcm_data, resample_state = audioop.ratecv(
+                    pcm_data,
+                    2,  # sample width (16-bit = 2 bytes)
+                    CHANNELS,
+                    VOIP_SAMPLE_RATE,
+                    self._device_sample_rate,
+                    resample_state,
+                )
 
         # Play to speaker
         stream.write(pcm_data)
@@ -528,8 +583,8 @@ class AudioHandler:  # pylint: disable=too-many-instance-attributes
 
         Flow:
         1. Open PyAudio output stream (16-bit signed PCM at device sample rate)
-        2. Call VoIPCall.read_audio() to get 8-bit unsigned linear PCM
-        3. Convert 8-bit unsigned -> 16-bit signed
+        2. Call VoIPCall.read_audio() to get raw μ-law bytes (via patches)
+        3. Decode μ-law to 16-bit signed PCM
         4. Apply output volume
         5. Resample to device rate if needed
         6. Write to speaker

@@ -337,24 +337,22 @@ class RealPhoneTestHarness:
         def _record_loop() -> None:
             """Background thread that records audio from VoIP to WAV file."""
             frames = []
-            raw_bytes = []  # Also capture raw bytes for debugging
+            raw_bytes = []  # μ-law bytes for debugging
             voip_sample_rate = 8000
-            frame_size = 160  # 160 bytes = 160 samples at 8-bit = 20ms at 8kHz
+            frame_size = 160  # 160 μ-law bytes = 160 samples = 20ms at 8kHz
 
             print(f"→ Recording to: {self._recording_file}")
-            print("  Recording 8kHz 8-bit unsigned linear PCM from pyVoIP...")
+            print("  Recording μ-law from pyVoIP and decoding to 16-bit PCM...")
 
             while self._recording:
                 try:
-                    # read_audio returns 8-bit unsigned linear PCM (0x80 = silence)
-                    unsigned_8bit = voip_call.read_audio(frame_size, blocking=True)
-                    if unsigned_8bit:
-                        raw_bytes.append(unsigned_8bit)
-                        # Convert 8-bit unsigned -> 16-bit signed for WAV file
-                        # Subtract 128 to convert unsigned to signed
-                        signed_8bit = audioop.bias(unsigned_8bit, 1, -128)
-                        # Convert 8-bit to 16-bit
-                        pcm_16bit = audioop.lin2lin(signed_8bit, 1, 2)
+                    # With pyvoip_patches applied, read_audio returns raw μ-law
+                    # bytes (0xFF = silence).
+                    ulaw_bytes = voip_call.read_audio(frame_size, blocking=True)
+                    if ulaw_bytes:
+                        raw_bytes.append(ulaw_bytes)
+                        # Decode μ-law to 16-bit signed PCM for the WAV file.
+                        pcm_16bit = audioop.ulaw2lin(ulaw_bytes, 2)
                         frames.append(pcm_16bit)
                 except Exception as e:
                     if self._recording:  # Only log if we weren't stopping
@@ -374,25 +372,26 @@ class RealPhoneTestHarness:
                     print(f"✓ Recording saved: {self._recording_file}")
                     print(f"  Duration: {duration:.1f}s, Frames: {len(frames)}")
 
-                    # Also save raw bytes for debugging
+                    # Also save raw μ-law bytes for debugging
                     raw_file = self._recording_file.replace(".wav", "_raw.bin")
                     with open(raw_file, "wb") as rf:
                         rf.write(b"".join(raw_bytes))
-                    print(f"  Raw 8-bit unsigned bytes saved to: {raw_file}")
+                    print(f"  Raw μ-law bytes saved to: {raw_file}")
 
-                    # Analyze raw bytes
+                    # Analyze raw μ-law byte distribution
                     all_raw = b"".join(raw_bytes)
                     from collections import Counter
                     byte_counts = Counter(all_raw)
-                    print(f"\n  === Raw byte analysis (8-bit unsigned, 0x80=silence) ===")
+                    print(f"\n  === Raw byte analysis (μ-law, 0xFF=silence) ===")
                     print(f"  Total bytes: {len(all_raw)}")
                     print(f"  Unique byte values: {len(byte_counts)}")
                     print(f"  Top 5 most common bytes:")
                     for byte_val, count in byte_counts.most_common(5):
                         pct = count / len(all_raw) * 100
-                        # Show signed equivalent (subtract 128)
-                        signed_val = byte_val - 128
-                        print(f"    0x{byte_val:02X} ({byte_val:3d}): {count:6d} ({pct:5.1f}%) = signed {signed_val:+4d}")
+                        # Decode this μ-law value to a 16-bit signed sample
+                        decoded = audioop.ulaw2lin(bytes([byte_val]), 2)
+                        sample_val = int.from_bytes(decoded, "little", signed=True)
+                        print(f"    0x{byte_val:02X} ({byte_val:3d}): {count:6d} ({pct:5.1f}%) -> 16-bit {sample_val:+6d}")
 
                 except Exception as e:
                     print(f"✗ Failed to save recording: {e}")

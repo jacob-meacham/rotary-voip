@@ -382,7 +382,9 @@ class PyVoIPClient(SIPClient):
         """Send audio from a WAV file through the current call.
 
         The WAV file can be any standard format - it will be automatically
-        converted to 8kHz 8-bit unsigned linear PCM for pyVoIP.
+        resampled to 8 kHz and encoded to μ-law for transmission. The pyVoIP
+        patches in :mod:`rotary_phone.audio.pyvoip_patches` make write_audio()
+        pass μ-law bytes through unmodified.
 
         Args:
             file_path: Path to WAV file
@@ -433,24 +435,16 @@ class PyVoIPClient(SIPClient):
                 frames = len(audio_data) // sample_width
                 framerate = 8000
 
-            # Convert to 8-bit unsigned linear PCM for pyVoIP
-            # pyVoIP's write_audio() expects linear audio (it encodes to μ-law internally)
-            # Format: 8-bit unsigned where 128 = silence
-            if sample_width != 1:  # Not already 8-bit
-                if sample_width != 2:
-                    logger.info("Converting to 16-bit")
-                    audio_data = audioop.lin2lin(audio_data, sample_width, 2)
-                    sample_width = 2
-
-                # Convert 16-bit signed -> 8-bit signed -> 8-bit unsigned
-                logger.info("Converting to 8-bit unsigned linear for pyVoIP")
-                audio_data = audioop.lin2lin(audio_data, 2, 1)  # 16-bit to 8-bit signed
-                audio_data = audioop.bias(audio_data, 1, 128)  # signed to unsigned
-            else:
-                # Already 8-bit - check if it needs unsigned conversion
-                # WAV files are typically signed, pyVoIP expects unsigned
-                logger.info("Converting 8-bit signed to unsigned")
-                audio_data = audioop.bias(audio_data, 1, 128)
+            # Encode to μ-law for the wire. Normalize to 16-bit signed first.
+            # WAV's 8-bit PCM is unsigned per spec, so flip bias before widening.
+            if sample_width == 1:
+                audio_data = audioop.bias(audio_data, 1, -128)
+            if sample_width != 2:
+                logger.info("Converting to 16-bit signed PCM")
+                audio_data = audioop.lin2lin(audio_data, sample_width, 2)
+                sample_width = 2
+            logger.info("Encoding to G.711 μ-law")
+            audio_data = audioop.lin2ulaw(audio_data, 2)
 
             # Send all audio at once (pyVoIP will handle packetization)
             logger.info("Sending %d bytes of audio", len(audio_data))
