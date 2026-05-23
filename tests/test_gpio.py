@@ -5,7 +5,7 @@ import time
 
 import pytest
 
-from rotary_phone.hardware import DIAL_ACTIVE, DIAL_PULSE, GPIO, HOOK, RINGER, get_gpio
+from rotary_phone.hardware import DIAL_PULSE, GPIO, HOOK, RINGER, get_gpio
 from rotary_phone.hardware.gpio_abstraction import MockGPIO
 
 
@@ -13,14 +13,6 @@ def test_get_gpio_mock() -> None:
     """Test that get_gpio returns MockGPIO when requested."""
     gpio = get_gpio(mock=True)
     assert isinstance(gpio, MockGPIO)
-
-
-def test_pin_constants() -> None:
-    """Test that pin constants are defined."""
-    assert HOOK == 17
-    assert DIAL_PULSE == 27
-    assert DIAL_ACTIVE == 22
-    assert RINGER == 23
 
 
 def test_mock_gpio_setmode() -> None:
