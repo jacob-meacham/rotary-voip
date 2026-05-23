@@ -117,9 +117,9 @@ class RealPhoneTestHarness:
         print(f"  Auto-start:   {'YES' if self.audio_config['auto_start'] else 'NO'}")
         print(f"  Input gain:   {self.audio_config['input_gain']:.1f}")
         print(f"  Output vol:   {self.audio_config['output_volume']:.1f}")
-        noise_gate = self.audio_config['noise_gate']
+        noise_gate = self.audio_config["noise_gate"]
         print(f"  Noise gate:   ±{noise_gate} {'(enabled)' if noise_gate > 0 else '(disabled)'}")
-        ringer_sound = self.audio_config['ringer_sound_file']
+        ringer_sound = self.audio_config["ringer_sound_file"]
         print(f"  Ringer sound: {ringer_sound or '(none - GPIO toggle only)'}")
         print()
 
@@ -381,6 +381,7 @@ class RealPhoneTestHarness:
                     # Analyze raw μ-law byte distribution
                     all_raw = b"".join(raw_bytes)
                     from collections import Counter
+
                     byte_counts = Counter(all_raw)
                     print(f"\n  === Raw byte analysis (μ-law, 0xFF=silence) ===")
                     print(f"  Total bytes: {len(all_raw)}")
@@ -391,7 +392,9 @@ class RealPhoneTestHarness:
                         # Decode this μ-law value to a 16-bit signed sample
                         decoded = audioop.ulaw2lin(bytes([byte_val]), 2)
                         sample_val = int.from_bytes(decoded, "little", signed=True)
-                        print(f"    0x{byte_val:02X} ({byte_val:3d}): {count:6d} ({pct:5.1f}%) -> 16-bit {sample_val:+6d}")
+                        print(
+                            f"    0x{byte_val:02X} ({byte_val:3d}): {count:6d} ({pct:5.1f}%) -> 16-bit {sample_val:+6d}"
+                        )
 
                 except Exception as e:
                     print(f"✗ Failed to save recording: {e}")

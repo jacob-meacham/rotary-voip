@@ -257,7 +257,6 @@ class MockGPIO(GPIO):  # pylint: disable=too-many-instance-attributes
         # Call callback outside of lock to avoid deadlock
         if callback_to_call is not None:
             callback_to_call(pin)
-
             logger.debug("Mock input: pin=%d, value=%d, triggered edge detect", pin, value)
 
     def get_pin_state(self, pin: int) -> Dict[str, Any]:

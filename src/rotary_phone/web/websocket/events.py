@@ -24,7 +24,9 @@ class WebSocketEvent(BaseModel):
     """Base WebSocket event."""
 
     type: EventType
-    timestamp: str = Field(default_factory=lambda: datetime.now(UTC).isoformat().replace("+00:00", "Z"))
+    timestamp: str = Field(
+        default_factory=lambda: datetime.now(UTC).isoformat().replace("+00:00", "Z")
+    )
     data: Dict[str, Any] = Field(default_factory=dict)
 
 

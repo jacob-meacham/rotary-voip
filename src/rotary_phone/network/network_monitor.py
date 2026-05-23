@@ -137,11 +137,15 @@ class NetworkMonitor:
     def check_connectivity(self) -> bool:
         """Perform a single connectivity check.
 
+        Opens a TCP socket to the configured host:port. This is a reachability
+        probe — it does not verify DNS resolution or UDP behavior, both of which
+        matter for SIP. The default (8.8.8.8:53) works because Google's public
+        DNS accepts TCP, but the semantic is "can I reach an internet host."
+
         Returns:
             True if network is reachable, False otherwise
         """
         try:
-            # Attempt to connect to the check host
             sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             sock.settimeout(3.0)
             sock.connect((self._check_host, self._check_port))

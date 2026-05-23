@@ -8,14 +8,13 @@ import yaml
 from ruamel.yaml import YAML, YAMLError as RuamelYAMLError
 from ruamel.yaml.comments import CommentedMap
 
+from rotary_phone.exceptions import ConfigError
+
 T = TypeVar("T")
 
 
 logger = logging.getLogger(__name__)
 
-
-# Re-export ConfigError from exceptions module for backward compatibility
-from rotary_phone.exceptions import ConfigError
 
 __all__ = ["ConfigError", "ConfigManager"]
 
