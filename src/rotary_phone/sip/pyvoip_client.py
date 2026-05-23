@@ -16,11 +16,9 @@ from pyVoIP.VoIP import PhoneStatus as PyVoIPPhoneStatus
 from pyVoIP.VoIP import VoIPCall, VoIPPhone
 
 from rotary_phone.exceptions import (
-    SIPAuthenticationError,
     SIPCallError,
     SIPError,
     SIPRegistrationError,
-    SIPTimeoutError,
 )
 from rotary_phone.sip.sip_client import CallState, SIPClient
 
@@ -225,34 +223,51 @@ class PyVoIPClient(SIPClient):
         thread.start()
 
     def _call_state_monitor(self) -> None:
-        """Background thread to monitor call state."""
-        while self._current_call is not None:
-            try:
-                # Check call state
-                call_state = self._current_call.state
-                current_state = self._call_state
+        """Background thread to monitor call state.
 
-                # Map pyVoIP call state to our state
-                if call_state == PyVoIPCallState.ANSWERED and current_state != CallState.CONNECTED:
+        Polls pyVoIP's call.state under _lock so reads and our own state
+        transitions are atomic with hangup()/reject_call(). The transition that
+        clears _current_call also fires the matching callback, so concurrent
+        teardown can't double-fire on_call_ended.
+        """
+        while True:
+            fire_answered = False
+            fire_ended = False
+
+            with self._lock:
+                current_call = self._current_call
+                if current_call is None:
+                    # hangup()/reject_call() already cleared the call.
+                    return
+
+                try:
+                    pyvoip_state = current_call.state
+                except Exception as e:
+                    logger.error("Error reading pyVoIP call state: %s", e)
+                    return
+
+                if (
+                    pyvoip_state == PyVoIPCallState.ANSWERED
+                    and self._call_state != CallState.CONNECTED
+                ):
                     logger.info("Call answered")
                     self._set_call_state(CallState.CONNECTED)
-                    if self._on_call_answered:
-                        self._on_call_answered()
-
-                elif call_state == PyVoIPCallState.ENDED:
+                    fire_answered = True
+                elif pyvoip_state == PyVoIPCallState.ENDED:
                     logger.info("Call ended")
-                    # Go directly back to REGISTERED (skip intermediate DISCONNECTED state)
+                    # Skip intermediate DISCONNECTED state
                     self._set_call_state(CallState.REGISTERED)
-                    if self._on_call_ended:
-                        self._on_call_ended()
                     self._current_call = None
-                    break
+                    fire_ended = True
 
-                time.sleep(0.1)  # Poll every 100ms
+            if fire_answered and self._on_call_answered:
+                self._on_call_answered()
+            if fire_ended:
+                if self._on_call_ended:
+                    self._on_call_ended()
+                return
 
-            except Exception as e:
-                logger.error("Error in call state monitor: %s", e)
-                break
+            time.sleep(0.1)
 
     def answer_call(self) -> None:
         """Answer an incoming call."""
@@ -362,19 +377,17 @@ class PyVoIPClient(SIPClient):
             Caller ID string
         """
         try:
-            # Try to get From header from SIP request
-            if hasattr(call, "request") and hasattr(call.request, "headers"):
-                from_header = str(call.request.headers.get("From", "Unknown"))
-                # Parse SIP URI from From header (e.g., "Alice <sip:alice@example.com>")
-                if "<" in from_header:
-                    start = from_header.index("<") + 1
-                    end = from_header.index(">")
-                    return from_header[start:end]
-                return from_header
-        except Exception as e:
-            logger.warning("Error extracting caller ID: %s", e)
+            from_header = str(call.request.headers.get("From", "Unknown"))
+        except AttributeError as e:
+            logger.warning("pyVoIP call shape changed, caller ID unavailable: %s", e)
+            return "Unknown"
 
-        return "Unknown"
+        # Parse SIP URI from From header (e.g., "Alice <sip:alice@example.com>")
+        if "<" in from_header and ">" in from_header:
+            start = from_header.index("<") + 1
+            end = from_header.index(">")
+            return from_header[start:end]
+        return from_header
 
     def send_audio_file(
         self, file_path: str, stop_check: Optional[Callable[[], bool]] = None
@@ -399,79 +412,70 @@ class PyVoIPClient(SIPClient):
         with self._lock:
             if self._current_call is None or self._call_state != CallState.CONNECTED:
                 raise RuntimeError(f"No connected call (state: {self._call_state.value})")
+            call = self._current_call
 
         logger.info("Sending audio file: %s", file_path)
 
         try:
-            # Open and read WAV file
-            with wave.open(file_path, "rb") as wav:
-                channels = wav.getnchannels()
-                sample_width = wav.getsampwidth()
-                framerate = wav.getframerate()
-                frames = wav.getnframes()
-
-                logger.info(
-                    "WAV format: %d Hz, %d-bit, %d channel(s), %d frames",
-                    framerate,
-                    sample_width * 8,
-                    channels,
-                    frames,
-                )
-
-                # Read all frames
-                audio_data = wav.readframes(frames)
-
-            # Convert to mono if stereo
-            if channels == 2:
-                logger.info("Converting stereo to mono")
-                audio_data = audioop.tomono(audio_data, sample_width, 0.5, 0.5)
-                channels = 1
-
-            # Resample to 8kHz if needed
-            if framerate != 8000:
-                logger.info("Resampling from %d Hz to 8000 Hz", framerate)
-                audio_data, _ = audioop.ratecv(audio_data, sample_width, 1, framerate, 8000, None)
-                # Recalculate frames after resampling
-                frames = len(audio_data) // sample_width
-                framerate = 8000
-
-            # Encode to μ-law for the wire. Normalize to 16-bit signed first.
-            # WAV's 8-bit PCM is unsigned per spec, so flip bias before widening.
-            if sample_width == 1:
-                audio_data = audioop.bias(audio_data, 1, -128)
-            if sample_width != 2:
-                logger.info("Converting to 16-bit signed PCM")
-                audio_data = audioop.lin2lin(audio_data, sample_width, 2)
-                sample_width = 2
-            logger.info("Encoding to G.711 μ-law")
-            audio_data = audioop.lin2ulaw(audio_data, 2)
-
-            # Send all audio at once (pyVoIP will handle packetization)
-            logger.info("Sending %d bytes of audio", len(audio_data))
-            self._current_call.write_audio(audio_data)
-
-            # Wait for the audio to finish playing (checking for interruption)
-            # At 8kHz μ-law (8-bit), we have 8000 bytes per second
-            duration = len(audio_data) / 8000.0
-            logger.info("Waiting %.2f seconds for audio to play", duration)
-
-            # Wait in small intervals so we can check for interruption
-            elapsed = 0.0
-            interval = 0.1  # Check every 100ms
-            while elapsed < duration:
-                if stop_check and stop_check():
-                    logger.info("Audio playback interrupted after %.2f seconds", elapsed)
-                    return False
-
-                time.sleep(min(interval, duration - elapsed))
-                elapsed += interval
-
-            logger.info("Audio sent successfully")
-            return True
-
+            ulaw_data = self._decode_wav_to_ulaw(file_path)
         except FileNotFoundError as exc:
-            logger.error("Audio file not found: %s", file_path)
             raise RuntimeError(f"Audio file not found: {file_path}") from exc
-        except Exception as e:
-            logger.error("Error sending audio: %s", e)
-            raise RuntimeError(f"Error sending audio: {e}") from e
+
+        logger.info("Sending %d bytes of audio", len(ulaw_data))
+        call.write_audio(ulaw_data)
+
+        # At 8kHz μ-law (8-bit), 1 byte = 1 sample = 125µs
+        duration = len(ulaw_data) / 8000.0
+        return self._wait_for_audio(duration, stop_check)
+
+    @staticmethod
+    def _decode_wav_to_ulaw(file_path: str) -> bytes:
+        """Read a WAV file and return μ-law-encoded 8 kHz mono audio."""
+        with wave.open(file_path, "rb") as wav:
+            channels = wav.getnchannels()
+            sample_width = wav.getsampwidth()
+            framerate = wav.getframerate()
+            frames = wav.getnframes()
+            audio_data = wav.readframes(frames)
+
+        logger.info(
+            "WAV format: %d Hz, %d-bit, %d channel(s), %d frames",
+            framerate,
+            sample_width * 8,
+            channels,
+            frames,
+        )
+
+        if channels == 2:
+            audio_data = audioop.tomono(audio_data, sample_width, 0.5, 0.5)
+
+        if framerate != 8000:
+            logger.info("Resampling from %d Hz to 8000 Hz", framerate)
+            audio_data, _ = audioop.ratecv(audio_data, sample_width, 1, framerate, 8000, None)
+
+        # WAV's 8-bit PCM is unsigned per spec; flip bias before widening to signed.
+        if sample_width == 1:
+            audio_data = audioop.bias(audio_data, 1, -128)
+        if sample_width != 2:
+            audio_data = audioop.lin2lin(audio_data, sample_width, 2)
+
+        return audioop.lin2ulaw(audio_data, 2)
+
+    @staticmethod
+    def _wait_for_audio(duration: float, stop_check: Optional[Callable[[], bool]]) -> bool:
+        """Sleep for `duration` seconds in short increments, polling stop_check.
+
+        Returns True if the full duration elapsed, False if stop_check tripped.
+        """
+        logger.info("Waiting %.2f seconds for audio to play", duration)
+        interval = 0.1
+        deadline = time.monotonic() + duration
+        while True:
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                logger.info("Audio sent successfully")
+                return True
+            if stop_check and stop_check():
+                logger.info("Audio playback interrupted, %.2fs remaining", remaining)
+                return False
+            time.sleep(min(interval, remaining))
