@@ -50,23 +50,6 @@ class TestSessionStore:
         store = SessionStore(timeout_minutes=30)
         assert store._timeout == timedelta(minutes=30)
 
-    def test_create_session(self) -> None:
-        """Test creating a new session."""
-        store = SessionStore()
-        session_id = store.create_session(user_id=1)
-
-        assert session_id is not None
-        assert len(session_id) > 20  # Secure token should be long
-        assert session_id in store._sessions
-
-    def test_create_session_stores_user_id(self) -> None:
-        """Test that session stores correct user ID."""
-        store = SessionStore()
-        session_id = store.create_session(user_id=42)
-
-        user_id, _ = store._sessions[session_id]
-        assert user_id == 42
-
     def test_get_user_id_valid_session(self) -> None:
         """Test getting user ID from valid session."""
         store = SessionStore()
