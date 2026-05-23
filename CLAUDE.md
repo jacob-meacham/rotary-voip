@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-This is a Rotary Phone VoIP Conversion project that converts vintage rotary phones into battery-powered, WiFi-connected VoIP phones. The system runs on a Raspberry Pi Zero 2 W and provides:
+This is a Rotary Phone VoIP Conversion project that converts vintage rotary phones into WiFi-connected VoIP phones. The system runs on a Raspberry Pi Zero 2 W and provides:
 
 - **Rotary dial input**: Reads pulse dialing and converts to digits
 - **VoIP calling**: SIP/VoIP calls over WiFi via providers like VoIP.ms
@@ -117,7 +117,6 @@ tests/
 | Dial pulse | GPIO 27 | Pin 13 | Pulses LOW for each digit |
 | Dial active | GPIO 22 | Pin 15 | LOW while dial rotating (optional) |
 | Ringer enable | GPIO 23 | Pin 16 | HIGH to enable ringer amp |
-| Low battery | GPIO 24 | Pin 18 | LOW when battery low (optional) |
 
 ### VoIP Integration
 
@@ -142,7 +141,7 @@ Modern Python web framework (FastAPI recommended) serving:
 - **Settings**: Speed dial configuration, whitelist management
 - **Call Log**: Searchable history with timestamps, duration
 - **Network**: WiFi configuration, AP mode toggle
-- **System**: Restart service, view logs, battery status
+- **System**: Restart service, view logs
 
 **Security**: Basic auth or session-based auth to prevent unauthorized access.
 
