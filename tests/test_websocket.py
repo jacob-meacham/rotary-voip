@@ -291,6 +291,7 @@ class TestConnectionManager:
             mock.side_effect = ValueError("Unexpected error")
             manager.broadcast_sync(event)  # Should not raise
 
+
 class TestConnectionManagerThreadSafety:
     """Tests for thread safety of ConnectionManager."""
 
