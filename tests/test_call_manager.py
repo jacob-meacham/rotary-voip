@@ -6,6 +6,7 @@ from unittest.mock import MagicMock, Mock, patch
 import pytest
 
 from rotary_phone.call_manager import CallManager, PhoneState
+from rotary_phone.exceptions import SIPCallError, SIPError
 from rotary_phone.hardware.hook_monitor import HookState
 from rotary_phone.sip.sip_client import CallState
 
@@ -366,7 +367,7 @@ def test_call_ended_while_off_hook(call_manager, mock_hook_monitor):
 def test_make_call_failure(call_manager, mock_config, mock_sip_client):
     """Test handling of make_call failure."""
     mock_config.is_allowed.return_value = True
-    mock_sip_client.make_call.side_effect = Exception("SIP error")
+    mock_sip_client.make_call.side_effect = SIPCallError("SIP error", number="555")
 
     call_manager.start()
     call_manager._on_off_hook()
@@ -382,7 +383,7 @@ def test_make_call_failure(call_manager, mock_config, mock_sip_client):
 
 def test_answer_call_failure(call_manager, mock_sip_client, mock_ringer):
     """Test handling of answer_call failure."""
-    mock_sip_client.answer_call.side_effect = Exception("Answer failed")
+    mock_sip_client.answer_call.side_effect = SIPError("Answer failed")
 
     call_manager.start()
     call_manager._on_incoming_call("5551234567")

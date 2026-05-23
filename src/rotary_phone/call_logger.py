@@ -4,7 +4,7 @@ import logging
 import threading
 from dataclasses import dataclass
 from datetime import UTC, datetime
-from typing import Optional
+from typing import Any, Dict, Optional
 
 from rotary_phone.database.database import Database
 from rotary_phone.database.models import CallLog
@@ -214,3 +214,34 @@ class CallLogger:
         """
         with self._lock:
             return self._current_call is not None
+
+    def handle_event(self, event_type: str, data: Dict[str, Any]) -> None:
+        """Route a CallManager event to the appropriate tracking method.
+
+        This is the subscription entry point; CallManager calls this for every
+        event it emits. CallLogger picks the events it cares about and ignores
+        the rest (e.g. phone_state_changed, digit_dialed).
+        """
+        if event_type == "call_started":
+            if data.get("direction") == "outbound":
+                self.on_outbound_call_started(
+                    dialed_number=data["dialed_number"],
+                    destination=data["number"],
+                    speed_dial_code=data.get("speed_dial_code"),
+                )
+            elif data.get("direction") == "inbound":
+                self.on_inbound_call_started(caller_id=data["number"])
+        elif event_type == "call_answered":
+            self.on_call_answered()
+        elif event_type == "call_ended":
+            self.on_call_ended(
+                status=data["status"],
+                error_message=data.get("error_message"),
+            )
+        elif event_type == "call_rejected":
+            self.on_call_rejected(
+                dialed_number=data["number"],
+                reason=data.get("reason", ""),
+            )
+        elif event_type == "call_attempt_cancelled":
+            self.cancel_current_call()

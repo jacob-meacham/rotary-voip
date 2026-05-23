@@ -9,11 +9,13 @@ from __future__ import annotations
 
 import logging
 import threading
+import time
 from enum import Enum
 from typing import TYPE_CHECKING, Any, Callable, Dict, Optional
 
 from rotary_phone.call_logger import CallLogger
 from rotary_phone.config.config_manager import ConfigManager
+from rotary_phone.exceptions import AudioError, SIPError
 from rotary_phone.hardware.dial_reader import DialReader
 from rotary_phone.hardware.dial_tone import DialTone
 from rotary_phone.hardware.hook_monitor import HookMonitor, HookState
@@ -97,6 +99,7 @@ class CallManager:  # pylint: disable=too-many-instance-attributes
         self._lock = threading.RLock()
         self._running = False
         self._current_caller_id = ""  # Track caller ID for logging
+        self._answered_at: Optional[float] = None  # monotonic ts when call connected
 
         logger.debug("CallManager initialized")
 
@@ -136,7 +139,7 @@ class CallManager:  # pylint: disable=too-many-instance-attributes
                     password=sip_config.get("password", ""),
                 )
                 logger.info("SIP registration initiated")
-            except Exception as e:
+            except SIPError as e:
                 logger.error("Failed to register SIP client: %s", e)
 
         logger.info("CallManager started in state: %s", self._state.value)
@@ -166,7 +169,7 @@ class CallManager:  # pylint: disable=too-many-instance-attributes
         # Unregister SIP client
         try:
             self._sip_client.unregister()
-        except Exception as e:
+        except SIPError as e:
             logger.error("Failed to unregister SIP client: %s", e)
 
         logger.info("CallManager stopped")
@@ -208,7 +211,10 @@ class CallManager:  # pylint: disable=too-many-instance-attributes
             self._event_callback = callback
 
     def _emit_event(self, event_type: str, data: Dict[str, Any]) -> None:
-        """Emit an event via callback if configured.
+        """Emit an event to all subscribers.
+
+        The user-set event_callback receives every event. If a CallLogger was
+        registered at construction, its handle_event also fires here.
 
         Args:
             event_type: Type of event
@@ -219,6 +225,11 @@ class CallManager:  # pylint: disable=too-many-instance-attributes
                 self._event_callback(event_type, data)
             except Exception as e:
                 logger.error("Error in event callback: %s", e)
+        if self._call_logger:
+            try:
+                self._call_logger.handle_event(event_type, data)
+            except Exception as e:
+                logger.error("Error in call logger event handler: %s", e)
 
     def _transition_to(self, new_state: PhoneState, error_msg: str = "") -> None:
         """Transition to a new state.
@@ -254,39 +265,53 @@ class CallManager:  # pylint: disable=too-many-instance-attributes
             logger.debug("Off-hook event in state: %s", self._state.value)
 
             if self._state == PhoneState.IDLE:
-                # User picked up phone, wait for dialing
-                self._dialed_number = ""
-                self._transition_to(PhoneState.OFF_HOOK_WAITING)
-                # Start dial tone
-                if self._dial_tone:
-                    self._dial_tone.start()
-
+                self._handle_idle_pickup()
             elif self._state == PhoneState.RINGING:
-                # User answered incoming call
-                logger.info("Answering incoming call")
-                self._ringer.stop_ringing()
+                self._handle_ringing_answer()
+
+    def _handle_idle_pickup(self) -> None:
+        """User picked up the phone from idle; start dial tone."""
+        self._dialed_number = ""
+        self._transition_to(PhoneState.OFF_HOOK_WAITING)
+        if self._dial_tone:
+            self._dial_tone.start()
+
+    def _handle_ringing_answer(self) -> None:
+        """User picked up while phone was ringing; answer the call."""
+        logger.info("Answering incoming call")
+        self._ringer.stop_ringing()
+        try:
+            self._sip_client.answer_call()
+        except SIPError as e:
+            logger.error("Failed to answer call: %s", e)
+            self._emit_event(
+                "call_ended",
+                {
+                    "direction": "inbound",
+                    "number": self._current_caller_id,
+                    "duration": 0.0,
+                    "status": "failed",
+                    "error_message": f"Failed to answer: {e}",
+                },
+            )
+            self._transition_to(PhoneState.ERROR, f"Failed to answer: {e}")
+            return
+
+        self._emit_event(
+            "call_answered",
+            {"direction": "inbound", "number": self._current_caller_id},
+        )
+
+        if self._audio_handler:
+            voip_call = self._sip_client.get_current_call()
+            if voip_call:
                 try:
-                    self._sip_client.answer_call()
-                    # Log call answered (for incoming calls)
-                    if self._call_logger:
-                        self._call_logger.on_call_answered()
-                    # Start USB audio for the call
-                    if self._audio_handler:
-                        voip_call = self._sip_client.get_current_call()
-                        if voip_call:
-                            try:
-                                self._audio_handler.start(voip_call)
-                            except Exception as audio_err:
-                                logger.error("Failed to start audio: %s", audio_err)
-                    self._transition_to(PhoneState.CONNECTED)
-                except Exception as e:
-                    logger.error("Failed to answer call: %s", e)
-                    # Log failed answer attempt
-                    if self._call_logger:
-                        self._call_logger.on_call_ended(
-                            status="failed", error_message=f"Failed to answer: {e}"
-                        )
-                    self._transition_to(PhoneState.ERROR, f"Failed to answer: {e}")
+                    self._audio_handler.start(voip_call)
+                except AudioError as audio_err:
+                    logger.error("Failed to start audio: %s", audio_err)
+
+        self._answered_at = time.monotonic()
+        self._transition_to(PhoneState.CONNECTED)
 
     def _on_on_hook(self) -> None:
         """Handle phone going on-hook (hung up)."""
@@ -305,17 +330,22 @@ class CallManager:  # pylint: disable=too-many-instance-attributes
             if self._dial_tone:
                 self._dial_tone.stop()
 
-            # Cancel call logger tracking if user hung up while dialing
+            # Cancel call logger tracking if user hung up while dialing (no call started yet)
             if self._state in (PhoneState.OFF_HOOK_WAITING, PhoneState.DIALING):
-                if self._call_logger:
-                    self._call_logger.cancel_current_call()
+                self._emit_event("call_attempt_cancelled", {})
 
             # Stop ringer if ringing (and log missed call)
             if self._state == PhoneState.RINGING:
                 self._ringer.stop_ringing()
-                # Log as missed call (user ignored incoming call)
-                if self._call_logger:
-                    self._call_logger.on_call_ended(status="missed")
+                self._emit_event(
+                    "call_ended",
+                    {
+                        "direction": "inbound",
+                        "number": self._current_caller_id,
+                        "duration": 0.0,
+                        "status": "missed",
+                    },
+                )
                 self._current_caller_id = ""
 
             # Hangup if in a call
@@ -324,15 +354,12 @@ class CallManager:  # pylint: disable=too-many-instance-attributes
                 if self._audio_handler:
                     try:
                         self._audio_handler.stop()
-                    except Exception as audio_err:
+                    except AudioError as audio_err:
                         logger.error("Failed to stop audio: %s", audio_err)
-                # Log call ended by user hanging up
-                if self._call_logger:
-                    status = "completed" if self._state == PhoneState.CONNECTED else "unanswered"
-                    self._call_logger.on_call_ended(status=status)
+                # SIP hangup fires _on_call_ended which emits the call_ended event.
                 try:
                     self._sip_client.hangup()
-                except Exception as e:
+                except SIPError as e:
                     logger.error("Failed to hangup call: %s", e)
 
             # Reset to idle
@@ -416,35 +443,35 @@ class CallManager:  # pylint: disable=too-many-instance-attributes
         # Check allowlist
         if not self._config.is_allowed(destination):
             logger.warning("Number %s is not in allowlist", destination)
-            # Log rejected call
-            if self._call_logger:
-                self._call_logger.on_call_rejected(dialed, f"Number {destination} is not allowed")
+            self._emit_event(
+                "call_rejected",
+                {
+                    "direction": "outbound",
+                    "number": dialed,
+                    "destination": destination,
+                    "reason": f"Number {destination} is not allowed",
+                },
+            )
             self._transition_to(PhoneState.ERROR, f"Number {destination} is not allowed")
             return
 
         # Number is allowed, initiate call
         logger.info("Calling %s", destination)
 
-        # Start tracking the call
-        if self._call_logger:
-            self._call_logger.on_outbound_call_started(
-                dialed_number=dialed,
-                destination=destination,
-                speed_dial_code=speed_dial_code,
-            )
+        # Emit call_started; CallLogger subscribes via handle_event
+        self._emit_event(
+            "call_started",
+            {
+                "direction": "outbound",
+                "number": destination,
+                "dialed_number": dialed,
+                "speed_dial_code": speed_dial_code,
+            },
+        )
 
         try:
             self._sip_client.make_call(destination)
             self._transition_to(PhoneState.CALLING)
-
-            # Emit call started event
-            self._emit_event(
-                "call_started",
-                {
-                    "direction": "outbound",
-                    "number": destination,
-                },
-            )
 
             # Start call attempt timeout timer
             self._call_attempt_timer = threading.Timer(
@@ -453,11 +480,18 @@ class CallManager:  # pylint: disable=too-many-instance-attributes
             self._call_attempt_timer.daemon = True
             self._call_attempt_timer.start()
             logger.debug("Call attempt timeout set for %.1f seconds", self._call_attempt_timeout)
-        except Exception as e:
+        except SIPError as e:
             logger.error("Failed to make call: %s", e)
-            # Log failed call
-            if self._call_logger:
-                self._call_logger.on_call_ended(status="failed", error_message=str(e))
+            self._emit_event(
+                "call_ended",
+                {
+                    "direction": "outbound",
+                    "number": destination,
+                    "duration": 0.0,
+                    "status": "failed",
+                    "error_message": str(e),
+                },
+            )
             self._transition_to(PhoneState.ERROR, f"Call failed: {e}")
 
     def _on_incoming_call(self, caller_id: str) -> None:
@@ -478,31 +512,34 @@ class CallManager:  # pylint: disable=too-many-instance-attributes
             # Check allowlist for incoming calls
             if not self._config.is_allowed(caller_id):
                 logger.warning("Rejecting incoming call from %s (not in allowlist)", caller_id)
-                # Reject the call first, then log if successful
                 try:
                     self._sip_client.reject_call()
-                    # Only log rejection after successful SIP rejection
-                    if self._call_logger:
-                        self._call_logger.on_inbound_call_started(caller_id)
-                        self._call_logger.on_call_rejected(
-                            caller_id, f"Caller {caller_id} is not in allowlist"
-                        )
-                except Exception as e:
+                except SIPError as e:
                     logger.error("Failed to reject call: %s", e)
+                    return
+                # CallLogger needs the started event so it has a pending call to mark rejected.
+                self._emit_event(
+                    "call_started",
+                    {"direction": "inbound", "number": caller_id},
+                )
+                self._emit_event(
+                    "call_rejected",
+                    {
+                        "direction": "inbound",
+                        "number": caller_id,
+                        "reason": f"Caller {caller_id} is not in allowlist",
+                    },
+                )
                 return
 
             # Track caller ID for logging
             self._current_caller_id = caller_id
 
-            # Start tracking the incoming call
-            if self._call_logger:
-                self._call_logger.on_inbound_call_started(caller_id)
-
             # Start ringing
             self._ringer.start_ringing()
             self._transition_to(PhoneState.RINGING)
 
-            # Emit call started event
+            # CallLogger subscribes to call_started to begin tracking
             self._emit_event(
                 "call_started",
                 {
@@ -525,9 +562,10 @@ class CallManager:  # pylint: disable=too-many-instance-attributes
                 logger.warning("Call answered in unexpected state: %s", self._state.value)
                 return
 
-            # Log call answered
-            if self._call_logger:
-                self._call_logger.on_call_answered()
+            self._emit_event(
+                "call_answered",
+                {"direction": "outbound", "number": self._dialed_number},
+            )
 
             # Start USB audio for the call
             if self._audio_handler:
@@ -535,9 +573,10 @@ class CallManager:  # pylint: disable=too-many-instance-attributes
                 if voip_call:
                     try:
                         self._audio_handler.start(voip_call)
-                    except Exception as e:
+                    except AudioError as e:
                         logger.error("Failed to start audio: %s", e)
 
+            self._answered_at = time.monotonic()
             self._transition_to(PhoneState.CONNECTED)
 
     def _on_call_ended(self) -> None:
@@ -554,7 +593,7 @@ class CallManager:  # pylint: disable=too-many-instance-attributes
             if self._audio_handler:
                 try:
                     self._audio_handler.stop()
-                except Exception as e:
+                except AudioError as e:
                     logger.error("Failed to stop audio: %s", e)
 
             # Determine call status for logging
@@ -570,16 +609,13 @@ class CallManager:  # pylint: disable=too-many-instance-attributes
                 call_direction = "outbound"
                 call_number = self._dialed_number
 
-            # Log call ended
-            if self._call_logger:
-                self._call_logger.on_call_ended(status=call_status)
+            # Compute duration from when CONNECTED was entered
+            call_duration = (
+                time.monotonic() - self._answered_at if self._answered_at is not None else 0.0
+            )
+            self._answered_at = None
 
-            # Note: Call duration is tracked by the CallLogger, but we don't have
-            # access to it here since on_call_ended() clears it. The actual duration
-            # is stored in the database and can be retrieved from call logs.
-            call_duration = 0.0
-
-            # Emit call ended event
+            # Emit call ended event (CallLogger subscribes via handle_event)
             self._emit_event(
                 "call_ended",
                 {
@@ -639,18 +675,25 @@ class CallManager:  # pylint: disable=too-many-instance-attributes
 
             logger.warning("Call attempt timed out after %.1f seconds", self._call_attempt_timeout)
 
-            # Hang up the call attempt
+            self._emit_event(
+                "call_ended",
+                {
+                    "direction": "outbound",
+                    "number": self._dialed_number,
+                    "duration": 0.0,
+                    "status": "unanswered",
+                    "error_message": (
+                        f"Call attempt timed out after {self._call_attempt_timeout}s"
+                    ),
+                },
+            )
+
+            # Hang up the call attempt (its callback will emit another call_ended,
+            # which CallLogger no-ops since the call is already finalized).
             try:
                 self._sip_client.hangup()
-            except Exception as e:
+            except SIPError as e:
                 logger.error("Failed to hangup timed out call: %s", e)
-
-            # Log as unanswered
-            if self._call_logger:
-                self._call_logger.on_call_ended(
-                    status="unanswered",
-                    error_message=f"Call attempt timed out after {self._call_attempt_timeout}s",
-                )
 
             # Check if phone is still off-hook
             hook_state = self._hook_monitor.get_state()
