@@ -5,8 +5,9 @@ from __future__ import annotations
 import asyncio
 import logging
 import tempfile
+from contextlib import asynccontextmanager
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any, AsyncIterator, Dict, Optional
 
 import yaml
 from fastapi import FastAPI, HTTPException, Request, WebSocket, WebSocketDisconnect
@@ -69,10 +70,40 @@ def create_app(
     Returns:
         Configured FastAPI application
     """
+
+    @asynccontextmanager
+    async def lifespan(fastapi_app: FastAPI) -> AsyncIterator[None]:
+        """Manage background tasks for the app lifecycle."""
+        cleanup_task: Optional[asyncio.Task[None]] = None
+        if hasattr(fastapi_app.state, "auth_manager"):
+
+            async def cleanup_loop() -> None:
+                while True:
+                    await asyncio.sleep(SESSION_CLEANUP_INTERVAL)
+                    try:
+                        fastapi_app.state.auth_manager.sessions.cleanup_expired()
+                    except Exception as e:
+                        logger.error("Session cleanup error: %s", e)
+
+            cleanup_task = asyncio.create_task(cleanup_loop())
+            logger.debug("Session cleanup task started")
+
+        try:
+            yield
+        finally:
+            if cleanup_task is not None:
+                cleanup_task.cancel()
+                try:
+                    await cleanup_task
+                except asyncio.CancelledError:
+                    pass
+                logger.debug("Session cleanup task stopped")
+
     app = FastAPI(
         title="Rotary Phone VoIP Admin",
         description="Web admin interface for rotary phone system",
         version="1.0.0",
+        lifespan=lifespan,
     )
 
     # Add rate limiter
@@ -162,37 +193,6 @@ def create_app(
     app.include_router(allowlist_router)
     app.include_router(speed_dial_router)
     app.include_router(network_router)
-
-    # -------------------------------------------------------------------------
-    # Startup/Shutdown Events
-    # -------------------------------------------------------------------------
-
-    @app.on_event("startup")
-    async def start_session_cleanup() -> None:
-        """Start background task to clean up expired sessions."""
-        if hasattr(app.state, "auth_manager"):
-
-            async def cleanup_loop() -> None:
-                while True:
-                    await asyncio.sleep(SESSION_CLEANUP_INTERVAL)
-                    try:
-                        app.state.auth_manager.sessions.cleanup_expired()
-                    except Exception as e:
-                        logger.error("Session cleanup error: %s", e)
-
-            app.state.session_cleanup_task = asyncio.create_task(cleanup_loop())
-            logger.debug("Session cleanup task started")
-
-    @app.on_event("shutdown")
-    async def stop_session_cleanup() -> None:
-        """Stop the session cleanup background task."""
-        if hasattr(app.state, "session_cleanup_task"):
-            app.state.session_cleanup_task.cancel()
-            try:
-                await app.state.session_cleanup_task
-            except asyncio.CancelledError:
-                pass
-            logger.debug("Session cleanup task stopped")
 
     # -------------------------------------------------------------------------
     # WebSocket Endpoint
