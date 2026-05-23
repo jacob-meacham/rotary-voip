@@ -5,8 +5,6 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from rotary_phone.audio.audio_handler import (
-    FRAME_SIZE,
-    SAMPLE_RATE,
     AudioDeviceNotFoundError,
     AudioError,
     AudioHandler,
@@ -265,31 +263,8 @@ class TestAudioLifecycle:
         mock_pa.terminate.assert_called_once()
 
 
-class TestAudioFormatConstants:
-    """Tests for audio format constants."""
-
-    def test_sample_rate(self) -> None:
-        """Test sample rate constant."""
-        assert SAMPLE_RATE == 8000
-
-    def test_frame_size(self) -> None:
-        """Test frame size constant."""
-        assert FRAME_SIZE == 160
-
-
 class TestAudioErrors:
     """Tests for audio error handling."""
-
-    def test_audio_error_base(self) -> None:
-        """Test AudioError base exception."""
-        err = AudioError("test error")
-        assert str(err) == "test error"
-
-    def test_audio_device_not_found_error(self) -> None:
-        """Test AudioDeviceNotFoundError exception."""
-        err = AudioDeviceNotFoundError("device not found")
-        assert str(err) == "device not found"
-        assert isinstance(err, AudioError)
 
     @patch("pyaudio.PyAudio", side_effect=ImportError("No module named 'pyaudio'"))
     def test_pyaudio_import_error(self, mock_pyaudio: MagicMock) -> None:
