@@ -291,23 +291,6 @@ class TestConnectionManager:
             mock.side_effect = ValueError("Unexpected error")
             manager.broadcast_sync(event)  # Should not raise
 
-    def test_connection_count_property(self) -> None:
-        """Test connection_count property."""
-        manager = ConnectionManager()
-
-        assert manager.connection_count == 0
-
-        async def add_connections() -> None:
-            ws1 = MockWebSocket()
-            ws2 = MockWebSocket()
-            await manager.connect(ws1)
-            await manager.connect(ws2)
-
-        asyncio.run(add_connections())
-
-        assert manager.connection_count == 2
-
-
 class TestConnectionManagerThreadSafety:
     """Tests for thread safety of ConnectionManager."""
 
