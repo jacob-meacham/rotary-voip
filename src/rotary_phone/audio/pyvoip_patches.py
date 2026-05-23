@@ -27,20 +27,24 @@ from pyVoIP import RTP as _rtp
 _MULAW_SILENCE = b"\xff"
 
 _lock = threading.Lock()
-_applied = False
+# Boxed in a dict so apply_patches() can mutate it without a `global` statement
+# (forbidden by the engineering constitution). Sentinel-once: flips False→True.
+_state: dict[str, bool] = {"applied": False}
 
 
 def apply_patches() -> None:
     """Install the patches. Idempotent."""
-    global _applied
     with _lock:
-        if _applied:
+        if _state["applied"]:
             return
 
         def parse_pcmu(self: Any, packet: Any) -> None:
             self.pmin.write(packet.timestamp, packet.payload)
 
+        # pylint: disable-next=unused-argument
         def encode_pcmu(self: Any, packet: bytes) -> bytes:
+            # `self` is required because this is bound as a method on RTPClient;
+            # the patch is a passthrough that returns the μ-law payload unchanged.
             return packet
 
         def pm_read(self: Any, length: int = 160) -> bytes:
@@ -64,4 +68,4 @@ def apply_patches() -> None:
         _rtp.RTPPacketManager.read = pm_read  # type: ignore[method-assign]
         _rtp.RTPClient.read = rtp_read  # type: ignore[method-assign]
 
-        _applied = True
+        _state["applied"] = True

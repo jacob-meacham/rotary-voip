@@ -48,6 +48,10 @@ logger = logging.getLogger(__name__)
 SESSION_CLEANUP_INTERVAL = 300  # 5 minutes
 
 
+# pylint: disable=too-many-locals,too-many-statements
+# create_app is the application wiring entry point; splitting it would only push
+# the same locals/statements into helpers without making the dependency graph
+# clearer. Disabled here rather than across the whole file.
 def create_app(
     call_manager: CallManager,
     config_manager: ConfigManager,
@@ -73,7 +77,14 @@ def create_app(
 
     # Add rate limiter
     app.state.limiter = limiter
-    app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+    # slowapi's _rate_limit_exceeded_handler is typed (Request, RateLimitExceeded) -> Response,
+    # but Starlette's add_exception_handler expects (Request, Exception) -> Response. The runtime
+    # contract is correct (the handler is only invoked for RateLimitExceeded); the signatures just
+    # don't compose. Tracked upstream at https://github.com/laurents/slowapi/issues/177.
+    app.add_exception_handler(
+        RateLimitExceeded,
+        _rate_limit_exceeded_handler,  # type: ignore[arg-type]
+    )
 
     # Store references for API handlers
     app.state.call_manager = call_manager
@@ -302,6 +313,9 @@ def create_app(
     # -------------------------------------------------------------------------
 
     @app.exception_handler(RequestValidationError)
+    # Branches map each Pydantic error_type to a specific 400 response shape;
+    # a dispatch table would add indirection without reducing the surface.
+    # pylint: disable-next=too-many-return-statements
     async def request_validation_exception_handler(
         request: Request,  # pylint: disable=unused-argument
         exc: RequestValidationError,
