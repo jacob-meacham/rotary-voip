@@ -29,15 +29,6 @@ VOIP_SAMPLE_RATE = 8000  # 8 kHz for VoIP
 VOIP_FRAME_SIZE = 160  # 160 samples = 20ms at 8kHz (matches pyVoIP's RTP cadence)
 CHANNELS = 1  # Mono
 
-# Backward compatibility aliases
-SAMPLE_RATE = VOIP_SAMPLE_RATE
-FRAME_SIZE = VOIP_FRAME_SIZE
-
-# pyVoIP returns 8-bit unsigned linear PCM (0x80 = silence)
-# We need to convert to/from 16-bit signed for PyAudio
-PYVOIP_SAMPLE_WIDTH = 1  # 8-bit
-PYAUDIO_SAMPLE_WIDTH = 2  # 16-bit
-
 # Common sample rates to try if device doesn't support 8kHz
 # Prefer 48kHz (clean 6:1 ratio) over 44.1kHz (5.5125:1 causes artifacts)
 FALLBACK_SAMPLE_RATES = [8000, 48000, 16000, 44100]
@@ -372,7 +363,9 @@ class AudioHandler:  # pylint: disable=too-many-instance-attributes
                 continue
 
         # If nothing worked, return 8kHz and hope for the best
-        logger.warning("Could not detect supported sample rate, defaulting to %d Hz", VOIP_SAMPLE_RATE)
+        logger.warning(
+            "Could not detect supported sample rate, defaulting to %d Hz", VOIP_SAMPLE_RATE
+        )
         return VOIP_SAMPLE_RATE
 
     def _setup_resamplers(self) -> None:
