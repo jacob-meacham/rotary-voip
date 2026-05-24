@@ -203,10 +203,16 @@ function connectWebSocket() {
         console.error('WebSocket error:', error);
     };
 
-    ws.onclose = () => {
+    ws.onclose = (event) => {
         console.log('WebSocket disconnected');
         wsConnected = false;
         updateConnectionStatus(false);
+
+        if (event.code === 4401) {
+            console.warn("WebSocket auth failed — redirecting to login");
+            window.location.href = "/login";
+            return;
+        }
 
         // Attempt to reconnect with exponential backoff
         if (wsReconnectTimeout) {
