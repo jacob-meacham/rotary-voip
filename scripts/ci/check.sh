@@ -1,6 +1,10 @@
 #!/bin/bash
 # Run all quality checks for the rotary phone project
 
+# Always run from the repo root so the relative paths below resolve correctly,
+# regardless of where the script is invoked from.
+cd "$(dirname "${BASH_SOURCE[0]}")/../.."
+
 # Track if any check fails
 exit_code=0
 

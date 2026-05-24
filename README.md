@@ -230,7 +230,7 @@ uv run mypy src/rotary_phone
 uv run black src tests
 
 # Run all checks
-./check.sh
+./scripts/ci/check.sh
 ```
 
 ## Architecture

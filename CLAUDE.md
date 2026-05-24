@@ -19,7 +19,7 @@ This is a Rotary Phone VoIP Conversion project that converts vintage rotary phon
 
 ### Testing
 ```bash
-./check.sh
+./scripts/ci/check.sh
 ```
 
 ### Running the Application
@@ -39,7 +39,7 @@ MOCK_GPIO=1 python -m src.main
 
 ### Linting and Code Quality
 ```bash
-./check.sh
+./scripts/ci/check.sh
 
 # If needed, format code with black
 black src/ tests/
