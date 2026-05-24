@@ -79,16 +79,35 @@ class TestCallLogModel:
 class TestDatabase:
     """Tests for the Database class."""
 
-    def test_init_creates_tables(self, temp_db: Database) -> None:
-        """Test that init_db creates the required tables."""
-        # Just verify we can add a call without error
+    def test_init_creates_tables_persists_call_round_trip(self, temp_db: Database) -> None:
+        """init_db creates the schema such that add_call() persists every column
+        and get_call() returns it intact. This is what 'the tables work' means.
+        """
+        timestamp = datetime.utcnow()
         call = CallLog(
-            timestamp=datetime.utcnow(),
+            timestamp=timestamp,
             direction="outbound",
             status="completed",
+            dialed_number="11",
+            destination="+15551234567",
+            speed_dial_code="11",
+            duration_seconds=42,
+            error_message=None,
         )
+
         call_id = temp_db.add_call(call)
-        assert call_id > 0
+        loaded = temp_db.get_call(call_id)
+
+        assert loaded is not None
+        assert loaded.id == call_id
+        assert loaded.timestamp == timestamp
+        assert loaded.direction == "outbound"
+        assert loaded.status == "completed"
+        assert loaded.dialed_number == "11"
+        assert loaded.destination == "+15551234567"
+        assert loaded.speed_dial_code == "11"
+        assert loaded.duration_seconds == 42
+        assert loaded.error_message is None
 
     def test_init_creates_parent_directory(self, tmp_path: Path) -> None:
         """Test that init_db creates parent directories."""
