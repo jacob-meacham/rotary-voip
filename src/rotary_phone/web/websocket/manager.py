@@ -20,6 +20,19 @@ class ConnectionManager:
         """Initialize connection manager."""
         self.active_connections: List[WebSocket] = []
         self._lock = asyncio.Lock()
+        # Reference to the event loop the FastAPI app is running on. Captured
+        # from the lifespan startup so non-async callers (sync callbacks from
+        # CallManager running in worker threads) can schedule coroutines onto
+        # the right loop via run_coroutine_threadsafe.
+        self._loop: asyncio.AbstractEventLoop | None = None
+
+    def set_event_loop(self, loop: asyncio.AbstractEventLoop) -> None:
+        """Register the event loop that broadcast_sync should target.
+
+        Args:
+            loop: The asyncio event loop owned by the FastAPI app.
+        """
+        self._loop = loop
 
     async def connect(self, websocket: WebSocket) -> None:
         """Accept and register a new WebSocket connection.
@@ -96,24 +109,30 @@ class ConnectionManager:
             logger.info("Removed %d disconnected clients", len(disconnected))
 
     def broadcast_sync(self, event: WebSocketEvent) -> None:
-        """Broadcast an event synchronously (from non-async code).
+        """Broadcast an event synchronously from a non-async thread.
 
-        This schedules the broadcast to run in the event loop.
+        Schedules the broadcast coroutine onto the FastAPI event loop using
+        run_coroutine_threadsafe, which is thread-safe (asyncio.create_task
+        is not — it requires being called from within the loop's own thread).
 
         Args:
             event: Event to broadcast
         """
+        if self._loop is None:
+            # Lifespan hasn't called set_event_loop yet, or we're already past
+            # shutdown. Either way, no loop to schedule onto.
+            logger.debug("Cannot broadcast event: event loop not yet registered")
+            return
+
+        if not self._loop.is_running():
+            logger.debug("Cannot broadcast event: event loop is not running (shutting down?)")
+            return
+
         try:
-            loop = asyncio.get_event_loop()
-            if loop.is_running():
-                # Schedule the coroutine to run in the existing event loop
-                asyncio.create_task(self.broadcast(event))
-            else:
-                # If no loop is running, run it synchronously
-                asyncio.run(self.broadcast(event))
-        except RuntimeError:
-            # No event loop available - this can happen during shutdown
-            logger.warning("Cannot broadcast event: no event loop available")
+            asyncio.run_coroutine_threadsafe(self.broadcast(event), self._loop)
+        except RuntimeError as e:
+            # Loop got torn down between is_running check and the schedule call.
+            logger.debug("Cannot broadcast event: %s", e)
         except Exception as e:
             logger.error("Error broadcasting event synchronously: %s", e)
 

@@ -3,6 +3,7 @@
 from .events import (
     CallEndedEvent,
     CallLogUpdatedEvent,
+    CallRejectedEvent,
     CallStartedEvent,
     ConfigChangedEvent,
     DigitDialedEvent,
@@ -19,6 +20,7 @@ __all__ = [
     "PhoneStateChangedEvent",
     "CallStartedEvent",
     "CallEndedEvent",
+    "CallRejectedEvent",
     "DigitDialedEvent",
     "ConfigChangedEvent",
     "CallLogUpdatedEvent",

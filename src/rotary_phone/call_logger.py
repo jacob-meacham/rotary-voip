@@ -173,12 +173,17 @@ class CallLogger:
         """Log a call that was rejected (e.g., not in allowlist).
 
         This is for calls that never started because validation failed.
+        Clears any pending call so the inevitable follow-up ``call_ended``
+        from the SIP client doesn't log a spurious "no call being tracked"
+        warning (CallManager emits ``call_started`` before ``call_rejected``
+        so the call_logger has a pending entry, but we finalize it here).
 
         Args:
             dialed_number: Number that was dialed
             reason: Why the call was rejected
         """
         with self._lock:
+            self._current_call = None
             call_log = CallLog(
                 timestamp=datetime.now(UTC),
                 direction="outbound",

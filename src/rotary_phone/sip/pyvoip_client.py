@@ -323,7 +323,13 @@ class PyVoIPClient(SIPClient):
 
             try:
                 self._current_call.deny()
-            except (OSError, RuntimeError, AttributeError) as e:
+            except AttributeError as e:
+                # pyVoIP bug: Call.deny() calls RTPClient.stop() which references
+                # self.sin, but sin is only created in start(). Rejected calls
+                # never start RTP, so this throws. The SIP-level rejection still
+                # succeeds; only the (unnecessary) RTP cleanup fails.
+                logger.debug("pyVoIP cleanup non-error after deny(): %s", e)
+            except (OSError, RuntimeError) as e:
                 logger.warning("Error rejecting call: %s", e)
 
             self._current_call = None

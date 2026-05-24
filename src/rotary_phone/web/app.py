@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import asyncio
 import logging
-import tempfile
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any, AsyncIterator, Dict, Optional
@@ -36,6 +35,7 @@ from rotary_phone.web.routes import (
 )
 from rotary_phone.web.websocket import (
     CallEndedEvent,
+    CallRejectedEvent,
     CallStartedEvent,
     ConnectionManager,
     DigitDialedEvent,
@@ -74,6 +74,12 @@ def create_app(
     @asynccontextmanager
     async def lifespan(fastapi_app: FastAPI) -> AsyncIterator[None]:
         """Manage background tasks for the app lifecycle."""
+        # Hand the WebSocket manager a reference to our running event loop so
+        # sync callers (CallManager events from worker threads) can schedule
+        # broadcasts onto the right loop via run_coroutine_threadsafe.
+        if hasattr(fastapi_app.state, "ws_manager"):
+            fastapi_app.state.ws_manager.set_event_loop(asyncio.get_running_loop())
+
         cleanup_task: Optional[asyncio.Task[None]] = None
         if hasattr(fastapi_app.state, "auth_manager"):
 
@@ -162,6 +168,12 @@ def create_app(
                     number=data["number"],
                     duration=data["duration"],
                     status=data["status"],
+                )
+            elif event_type == "call_rejected":
+                event = CallRejectedEvent(
+                    direction=data["direction"],
+                    number=data["number"],
+                    reason=data.get("reason", ""),
                 )
             elif event_type == "digit_dialed":
                 event = DigitDialedEvent(
@@ -281,41 +293,40 @@ def create_app(
     @app.post("/api/config", dependencies=_protected)
     async def save_config(request: Request) -> Dict[str, Any]:
         """Save configuration file. Accepts raw YAML text."""
+        yaml_text = (await request.body()).decode("utf-8")
+
         try:
-            yaml_content = await request.body()
-            yaml_text = yaml_content.decode("utf-8")
+            parsed = yaml.safe_load(yaml_text)
+        except yaml.YAMLError as e:
+            raise HTTPException(status_code=400, detail=f"Invalid YAML: {e}") from e
 
-            try:
-                yaml.safe_load(yaml_text)
-            except yaml.YAMLError as e:
-                raise HTTPException(status_code=400, detail=f"Invalid YAML: {e}") from e
+        if not isinstance(parsed, dict):
+            raise HTTPException(
+                status_code=400,
+                detail="Config root must be a YAML mapping",
+            )
 
-            with tempfile.NamedTemporaryFile(
-                mode="w", suffix=".yaml", delete=False, encoding="utf-8"
-            ) as tmp:
-                tmp.write(yaml_text)
-                tmp_path = tmp.name
-
-            try:
-                ConfigManager(user_config_path=tmp_path)
-
-                config_file = Path(app.state.config_path)
-                config_file.write_text(yaml_text, encoding="utf-8")
-
-                return {
-                    "success": True,
-                    "message": "Configuration saved. Restart the application to apply changes.",
-                    "restart_required": True,
-                }
-            finally:
-                Path(tmp_path).unlink()
-
+        try:
+            ConfigManager.validate_config_dict(parsed)
         except ConfigError as e:
             raise HTTPException(status_code=400, detail=f"Invalid configuration: {e}") from e
-        except HTTPException:
-            raise
-        except Exception as e:
-            raise HTTPException(status_code=500, detail=f"Failed to save config: {e}") from e
+
+        # Atomic write: write to sibling .tmp, then rename. No leak risk because
+        # rename is atomic and a failed write leaves no committed file.
+        config_file = Path(app.state.config_path)
+        tmp_file = config_file.with_suffix(config_file.suffix + ".tmp")
+        try:
+            tmp_file.write_text(yaml_text, encoding="utf-8")
+            tmp_file.replace(config_file)
+        except OSError as e:
+            tmp_file.unlink(missing_ok=True)
+            raise HTTPException(status_code=500, detail=f"Failed to write config file: {e}") from e
+
+        return {
+            "success": True,
+            "message": "Configuration saved. Restart the application to apply changes.",
+            "restart_required": True,
+        }
 
     # -------------------------------------------------------------------------
     # Exception Handlers

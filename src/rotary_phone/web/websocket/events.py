@@ -15,6 +15,7 @@ class EventType(str, Enum):
     PHONE_STATE_CHANGED = "phone_state_changed"
     CALL_STARTED = "call_started"
     CALL_ENDED = "call_ended"
+    CALL_REJECTED = "call_rejected"
     DIGIT_DIALED = "digit_dialed"
     CONFIG_CHANGED = "config_changed"
     CALL_LOG_UPDATED = "call_log_updated"
@@ -165,6 +166,36 @@ class ConfigChangedEvent(WebSocketEvent):
         super().__init__(
             data={
                 "section": section,
+            },
+            **kwargs,
+        )
+
+
+class CallRejectedEvent(WebSocketEvent):
+    """Call rejected event (e.g. caller not in allowlist)."""
+
+    type: EventType = EventType.CALL_REJECTED
+
+    def __init__(
+        self,
+        direction: str,
+        number: str,
+        reason: str,
+        **kwargs: Any,
+    ):
+        """Initialize call rejected event.
+
+        Args:
+            direction: Call direction (inbound/outbound)
+            number: Phone number that was rejected
+            reason: Why the call was rejected
+            **kwargs: Additional fields
+        """
+        super().__init__(
+            data={
+                "direction": direction,
+                "number": number,
+                "reason": reason,
             },
             **kwargs,
         )

@@ -2,7 +2,6 @@
 
 import asyncio
 import json
-from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -258,42 +257,45 @@ class TestConnectionManager:
         assert ws3 in manager.active_connections
         assert manager.connection_count == 2
 
-    def test_broadcast_sync_with_running_loop(self) -> None:
-        """Test synchronous broadcast when event loop is running."""
+    def test_broadcast_sync_schedules_onto_registered_loop(self) -> None:
+        """Sync broadcast delivers events when the loop has been registered."""
         manager = ConnectionManager()
 
         async def run_test() -> None:
+            manager.set_event_loop(asyncio.get_running_loop())
             ws = MockWebSocket()
             await manager.connect(ws)
 
             event = CallStartedEvent(direction="outbound", number="123")
             manager.broadcast_sync(event)
 
-            # Give the scheduled task a chance to run
+            # Give the scheduled coroutine a chance to run on the loop
             await asyncio.sleep(0.01)
 
             assert len(ws.sent_messages) == 1
 
         asyncio.run(run_test())
 
-    def test_broadcast_sync_no_loop(self) -> None:
-        """Test synchronous broadcast when no event loop exists."""
+    def test_broadcast_sync_no_loop_registered(self) -> None:
+        """Without a registered loop, broadcast_sync is silently dropped."""
         manager = ConnectionManager()
         event = CallStartedEvent(direction="outbound", number="123")
 
-        # This should not raise, just log a warning
-        with patch("rotary_phone.web.websocket.manager.asyncio.get_event_loop") as mock:
-            mock.side_effect = RuntimeError("No event loop")
-            manager.broadcast_sync(event)  # Should not raise
+        # Should not raise — there's nowhere to schedule the coroutine
+        manager.broadcast_sync(event)
 
-    def test_broadcast_sync_other_error(self) -> None:
-        """Test synchronous broadcast with other errors."""
+    def test_broadcast_sync_loop_not_running(self) -> None:
+        """If the registered loop has stopped, broadcast_sync is dropped."""
         manager = ConnectionManager()
-        event = CallStartedEvent(direction="outbound", number="123")
 
-        with patch("rotary_phone.web.websocket.manager.asyncio.get_event_loop") as mock:
-            mock.side_effect = ValueError("Unexpected error")
-            manager.broadcast_sync(event)  # Should not raise
+        # Build a loop, close it, hand the closed loop to the manager
+        loop = asyncio.new_event_loop()
+        loop.close()
+        manager.set_event_loop(loop)
+
+        event = CallStartedEvent(direction="outbound", number="123")
+        # Should not raise even though the loop is dead
+        manager.broadcast_sync(event)
 
 
 class TestConnectionManagerThreadSafety:
