@@ -159,22 +159,22 @@ def _init_hardware(gpio: GPIO, config: ConfigManager) -> HardwareComponents:
     )
     logger.info("  - DialReader initialized")
 
-    # Get optional ring sound file from hardware config
-    hardware_config: Dict[str, Any] = config.get("hardware", {})
-    ring_sound_file = hardware_config.get("ring_sound_file")
+    # Get audio config — sound files and the USB audio device used by aplay
+    audio_config: Dict[str, Any] = config.get("audio", {})
+    audio_device = audio_config.get("usb_device")
 
     ringer = Ringer(
         gpio=gpio,
         ring_on_duration=timing.get("ring_duration", 2.0),
         ring_off_duration=timing.get("ring_pause", 4.0),
-        sound_file=ring_sound_file,
+        sound_file=audio_config.get("ring_sound"),
+        audio_device=audio_device,
     )
     logger.info("  - Ringer initialized")
 
     # Initialize dial tone player
-    audio_config: Dict[str, Any] = config.get("audio", {})
     dial_tone_file = audio_config.get("dial_tone")
-    dial_tone = DialTone(sound_file=dial_tone_file)
+    dial_tone = DialTone(sound_file=dial_tone_file, audio_device=audio_device)
     if dial_tone_file:
         logger.info("  - DialTone initialized with: %s", dial_tone_file)
     else:

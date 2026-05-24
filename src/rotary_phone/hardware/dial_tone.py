@@ -20,14 +20,21 @@ class DialTone:
     or hangs up). Uses aplay to play a WAV file in a loop.
     """
 
-    def __init__(self, sound_file: Optional[str] = None) -> None:
+    def __init__(
+        self,
+        sound_file: Optional[str] = None,
+        audio_device: Optional[str] = None,
+    ) -> None:
         """Initialize the dial tone player.
 
         Args:
             sound_file: Path to WAV file containing dial tone audio.
                        If None or file doesn't exist, dial tone is disabled.
+            audio_device: Optional ALSA device for aplay (e.g. "plughw:1,0"). If None,
+                       aplay uses the system default device.
         """
         self._sound_file = sound_file
+        self._audio_device = audio_device
         self._is_playing = False
         self._play_thread: Optional[threading.Thread] = None
         self._stop_event = threading.Event()
@@ -118,9 +125,13 @@ class DialTone:
                 with self._lock:
                     if not self._is_playing:
                         break
+                    cmd = ["aplay", "-q"]
+                    if self._audio_device:
+                        cmd.extend(["-D", self._audio_device])
+                    cmd.append(self._sound_file)
                     # pylint: disable=consider-using-with
                     self._process = subprocess.Popen(
-                        ["aplay", "-q", self._sound_file],
+                        cmd,
                         stdout=subprocess.DEVNULL,
                         stderr=subprocess.DEVNULL,
                     )

@@ -29,12 +29,14 @@ class Ringer:
     Standard North American ring pattern is 2 seconds on, 4 seconds off.
     """
 
+    # pylint: disable-next=too-many-positional-arguments
     def __init__(
         self,
         gpio: GPIO,
         ring_on_duration: float = 2.0,
         ring_off_duration: float = 4.0,
         sound_file: Optional[str] = None,
+        audio_device: Optional[str] = None,
     ) -> None:
         """Initialize the ringer.
 
@@ -43,11 +45,14 @@ class Ringer:
             ring_on_duration: Duration in seconds for ringer on state (default 2.0)
             ring_off_duration: Duration in seconds for ringer off state (default 4.0)
             sound_file: Optional path to WAV file to play when ringing
+            audio_device: Optional ALSA device for aplay (e.g. "plughw:1,0"). If None,
+                aplay uses the system default device.
         """
         self._gpio = gpio
         self._ring_on_duration = ring_on_duration
         self._ring_off_duration = ring_off_duration
         self._sound_file = sound_file
+        self._audio_device = audio_device
         self._is_ringing = False
         self._ring_thread: Optional[threading.Thread] = None
         self._lock = threading.RLock()  # Reentrant lock for nested calls
@@ -149,8 +154,12 @@ class Ringer:
 
             # Play sound file
             # Use timeout slightly longer than ring duration to prevent hanging
+            cmd = ["aplay", "-q"]
+            if self._audio_device:
+                cmd.extend(["-D", self._audio_device])
+            cmd.append(self._sound_file)
             result = subprocess.run(
-                ["aplay", "-q", self._sound_file],
+                cmd,
                 capture_output=True,
                 timeout=self._ring_on_duration + 1.0,
                 check=False,  # Don't raise on non-zero exit
