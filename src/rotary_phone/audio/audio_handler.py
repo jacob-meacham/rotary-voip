@@ -273,8 +273,15 @@ class AudioHandler:  # pylint: disable=too-many-instance-attributes
                 # Check if device matches criteria
                 matches = False
                 if self._device_name:
-                    # Explicit device name match (case-insensitive)
-                    matches = self._device_name.lower() in name.lower()
+                    # Explicit device name match (case-insensitive). ALSA
+                    # devices in PyAudio's listing show up as e.g.
+                    # "USB Audio Device: - (hw:0,0)", so a config value of
+                    # "plughw:0,0" needs the "plug" prefix stripped before
+                    # the substring check finds anything.
+                    needle = self._device_name.lower()
+                    if needle.startswith("plughw:"):
+                        needle = needle[len("plug") :]
+                    matches = needle in name.lower()
                 else:
                     # Auto-detect USB devices
                     matches = "usb" in name.lower()
