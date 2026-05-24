@@ -205,14 +205,18 @@ def create_app(
 
     @app.websocket("/ws")
     async def websocket_endpoint(websocket: WebSocket) -> None:
-        """WebSocket endpoint for real-time updates."""
-        ws_manager: ConnectionManager = app.state.ws_manager
+        """WebSocket endpoint for real-time updates. Requires a valid
+        session cookie; otherwise rejects with WS close code 4401."""
+        session_id = websocket.cookies.get("session_id")
+        auth_manager: AuthManager = websocket.app.state.auth_manager
+        if auth_manager.get_current_user(session_id) is None:
+            await websocket.close(code=4401, reason="Not authenticated")
+            return
+
+        ws_manager: ConnectionManager = websocket.app.state.ws_manager
         await ws_manager.connect(websocket)
         try:
-            # Keep connection alive and listen for messages
             while True:
-                # We don't expect messages from client, but need to keep connection alive
-                # This will raise WebSocketDisconnect when client disconnects
                 await websocket.receive_text()
         except WebSocketDisconnect:
             await ws_manager.disconnect(websocket)
