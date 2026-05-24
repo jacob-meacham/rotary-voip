@@ -309,21 +309,27 @@ def test_get_section_configs() -> None:
         Path(config_path).unlink()
 
 
-def test_to_dict() -> None:
-    """Test getting entire config as dictionary."""
-    config_dict = get_minimal_valid_config()
-    config_path = create_temp_config(config_dict)
+def test_to_dict_round_trips_seeded_values() -> None:
+    """to_dict() returns every section with the values the YAML actually
+    contained — not just the section keys."""
+    seeded = get_minimal_valid_config()
+    seeded["sip"]["server"] = "sip.example.com"
+    seeded["sip"]["username"] = "alice"
+    seeded["speed_dial"] = {"11": "+15551234567"}
+    seeded["allowlist"] = ["+15551234567"]
+    seeded["timing"]["inter_digit_timeout"] = 3.5
+
+    config_path = create_temp_config(seeded)
 
     try:
-        config = ConfigManager(user_config_path=config_path)
+        result = ConfigManager(user_config_path=config_path).to_dict()
 
-        config_dict_result = config.to_dict()
-        assert isinstance(config_dict_result, dict)
-        assert "sip" in config_dict_result
-        assert "timing" in config_dict_result
-        assert "audio" in config_dict_result
-        assert "speed_dial" in config_dict_result
-        assert "allowlist" in config_dict_result
+        assert result["sip"]["server"] == "sip.example.com"
+        assert result["sip"]["username"] == "alice"
+        assert result["sip"]["port"] == 5060
+        assert result["timing"]["inter_digit_timeout"] == 3.5
+        assert result["speed_dial"] == {"11": "+15551234567"}
+        assert result["allowlist"] == ["+15551234567"]
     finally:
         Path(config_path).unlink()
 
