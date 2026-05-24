@@ -10,12 +10,6 @@
 #   cd rotary-voip
 #   sudo ./install.sh
 #
-# Restore non-git assets (config, db, sounds, recordings) from a backup after install:
-#   sudo ./install.sh --restore-from /path/to/backup
-#
-# When installing from curl with restore:
-#   sudo bash -c "$(curl -fsSL https://raw.githubusercontent.com/jacob-meacham/rotary-voip/main/install.sh)" -- --restore-from /tmp/backup
-#
 # To update after installation:
 #   cd /opt/rotary-phone && sudo git pull && sudo .venv/bin/pip install .
 #
@@ -26,26 +20,6 @@ set -e
 REPO_URL="https://github.com/jacob-meacham/rotary-voip.git"
 INSTALL_DIR="/opt/rotary-phone"
 SERVICE_FILE="/etc/systemd/system/rotary-phone.service"
-
-# Parse arguments
-RESTORE_FROM=""
-while [[ $# -gt 0 ]]; do
-    case "$1" in
-        --restore-from)
-            RESTORE_FROM="$2"
-            shift 2
-            ;;
-        --help|-h)
-            sed -n '2,/^$/p' "${BASH_SOURCE[0]}" | sed 's/^#//'
-            exit 0
-            ;;
-        *)
-            echo "Unknown argument: $1" >&2
-            echo "Run with --help for usage." >&2
-            exit 1
-            ;;
-    esac
-done
 
 # Colors for output
 RED='\033[0;31m'
@@ -85,14 +59,6 @@ fi
 # Check if we're on a Raspberry Pi (optional, just warns)
 if [[ ! -f /proc/device-tree/model ]] || ! grep -qi "raspberry" /proc/device-tree/model 2>/dev/null; then
     log_warn "This doesn't appear to be a Raspberry Pi. GPIO may not work correctly."
-fi
-
-# Validate --restore-from path early so we fail before doing any install work
-if [[ -n "$RESTORE_FROM" ]]; then
-    if [[ ! -d "$RESTORE_FROM" ]]; then
-        log_error "--restore-from directory does not exist: $RESTORE_FROM"
-        exit 1
-    fi
 fi
 
 echo ""
@@ -166,12 +132,6 @@ log_info "Service installed and enabled"
 log_step "Installing CLI tool..."
 ln -sf "$INSTALL_DIR/bin/rotary-voip" /usr/local/bin/rotary-voip
 log_info "CLI installed: rotary-voip"
-
-# Step 6 (optional): Restore non-git assets from a backup
-if [[ -n "$RESTORE_FROM" ]]; then
-    log_step "Restoring assets from $RESTORE_FROM..."
-    bash "$INSTALL_DIR/restore.sh" "$RESTORE_FROM"
-fi
 
 # Verification
 echo ""
