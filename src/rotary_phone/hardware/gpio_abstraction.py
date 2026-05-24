@@ -302,7 +302,11 @@ class RealGPIO(GPIO):
         flags = pull_flags.get(pull_up_down, self._lgpio.SET_PULL_NONE)
 
         if mode == PinMode.IN:
-            self._lgpio.gpio_claim_input(self._handle, pin, flags)
+            # Claim as alert (not plain input) so subsequent add_event_detect()
+            # callbacks actually fire. lgpio.callback() on a pin claimed via
+            # gpio_claim_input is silently a no-op on at least lgpio 0.2.2 +
+            # Trixie's kernel; gpio_claim_alert works for both reads and edges.
+            self._lgpio.gpio_claim_alert(self._handle, pin, self._lgpio.BOTH_EDGES, flags)
         else:
             self._lgpio.gpio_claim_output(self._handle, pin, 0, flags)
 
