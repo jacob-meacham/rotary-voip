@@ -310,11 +310,13 @@ def test_get_section_configs() -> None:
 
 
 def test_to_dict_round_trips_seeded_values() -> None:
-    """to_dict() returns every section with the values the YAML actually
-    contained — not just the section keys."""
+    """to_dict() returns the key configuration sections with the values the
+    YAML actually contained — proving load + serialize is a value-preserving
+    round-trip, not just a structural copy."""
     seeded = get_minimal_valid_config()
     seeded["sip"]["server"] = "sip.example.com"
     seeded["sip"]["username"] = "alice"
+    seeded["sip"]["port"] = 5061
     seeded["speed_dial"] = {"11": "+15551234567"}
     seeded["allowlist"] = ["+15551234567"]
     seeded["timing"]["inter_digit_timeout"] = 3.5
@@ -326,7 +328,7 @@ def test_to_dict_round_trips_seeded_values() -> None:
 
         assert result["sip"]["server"] == "sip.example.com"
         assert result["sip"]["username"] == "alice"
-        assert result["sip"]["port"] == 5060
+        assert result["sip"]["port"] == 5061
         assert result["timing"]["inter_digit_timeout"] == 3.5
         assert result["speed_dial"] == {"11": "+15551234567"}
         assert result["allowlist"] == ["+15551234567"]
