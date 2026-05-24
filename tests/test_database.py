@@ -84,30 +84,38 @@ class TestDatabase:
         and get_call() returns it intact. This is what 'the tables work' means.
         """
         timestamp = datetime.utcnow()
+        answered_at = timestamp + timedelta(seconds=2)
+        ended_at = timestamp + timedelta(seconds=44)
         call = CallLog(
             timestamp=timestamp,
             direction="outbound",
             status="completed",
-            dialed_number="11",
+            caller_id="+15550001111",
+            dialed_number="55",
             destination="+15551234567",
             speed_dial_code="11",
             duration_seconds=42,
-            error_message=None,
+            answered_at=answered_at,
+            ended_at=ended_at,
+            error_message="timed out",
         )
 
         call_id = temp_db.add_call(call)
         loaded = temp_db.get_call(call_id)
 
-        assert loaded is not None
+        assert loaded is not None, f"get_call({call_id}) returned None"
         assert loaded.id == call_id
         assert loaded.timestamp == timestamp
         assert loaded.direction == "outbound"
         assert loaded.status == "completed"
-        assert loaded.dialed_number == "11"
+        assert loaded.caller_id == "+15550001111"
+        assert loaded.dialed_number == "55"
         assert loaded.destination == "+15551234567"
         assert loaded.speed_dial_code == "11"
         assert loaded.duration_seconds == 42
-        assert loaded.error_message is None
+        assert loaded.answered_at == answered_at
+        assert loaded.ended_at == ended_at
+        assert loaded.error_message == "timed out"
 
     def test_init_creates_parent_directory(self, tmp_path: Path) -> None:
         """Test that init_db creates parent directories."""
