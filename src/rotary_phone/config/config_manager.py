@@ -66,8 +66,9 @@ class ConfigManager:
         except OSError as e:
             raise ConfigError(f"Failed to load config file {path}: {e}") from e
 
-    def _validate_config(self) -> None:  # pylint: disable=too-many-branches
-        """Validate the loaded configuration.
+    @staticmethod
+    def validate_config_dict(config: Dict[str, Any]) -> None:  # pylint: disable=too-many-branches
+        """Validate a configuration dictionary.
 
         Raises:
             ConfigError: If configuration is invalid
@@ -75,11 +76,11 @@ class ConfigManager:
         # Check required top-level sections
         required_sections = ["sip", "timing", "audio"]
         for section in required_sections:
-            if section not in self._config:
+            if section not in config:
                 raise ConfigError(f"Missing required config section: {section}")
 
         # Validate SIP settings
-        sip = self._config["sip"]
+        sip = config["sip"]
         if not isinstance(sip, dict):
             raise ConfigError("'sip' section must be a dictionary")
 
@@ -87,7 +88,7 @@ class ConfigManager:
         # They'll be validated at runtime when actually making calls
 
         # Validate timing values are positive numbers
-        timing = self._config["timing"]
+        timing = config["timing"]
         if not isinstance(timing, dict):
             raise ConfigError("'timing' section must be a dictionary")
 
@@ -122,14 +123,18 @@ class ConfigManager:
                     raise ConfigError(f"Timing '{timing_name}' must be positive")
 
         # Validate speed_dial is a dict (can be empty)
-        if "speed_dial" in self._config:
-            if not isinstance(self._config["speed_dial"], dict):
+        if "speed_dial" in config:
+            if not isinstance(config["speed_dial"], dict):
                 raise ConfigError("'speed_dial' must be a dictionary")
 
         # Validate allowlist is a list (can be empty)
-        if "allowlist" in self._config:
-            if not isinstance(self._config["allowlist"], list):
+        if "allowlist" in config:
+            if not isinstance(config["allowlist"], list):
                 raise ConfigError("'allowlist' must be a list")
+
+    def _validate_config(self) -> None:
+        """Validate the loaded configuration."""
+        self.validate_config_dict(self._config)
 
     def _load_config(self) -> None:
         """Load configuration from user config file.
@@ -192,9 +197,11 @@ class ConfigManager:
     def _normalize_phone_number(number: str) -> str:
         """Normalize a phone number for comparison.
 
-        Strips formatting characters (+, -, spaces, parentheses) and removes
-        leading country code '1' for US/Canada numbers to ensure consistent
-        matching between formats like '+14065551234' and '4065551234'.
+        Handles SIP URIs (sip:user@host[:port]) by extracting the user
+        portion first, then strips formatting characters (+, -, spaces,
+        parentheses) and removes leading country code '1' for US/Canada
+        numbers to ensure consistent matching between formats like
+        '+14065551234', '4065551234', and 'sip:4065551234@host'.
 
         Args:
             number: Phone number to normalize
@@ -202,6 +209,13 @@ class ConfigManager:
         Returns:
             Normalized phone number (digits only, no leading '1' for 11-digit numbers)
         """
+        # If this looks like a SIP URI, extract just the user portion before @
+        # so digits in the host (e.g. IP address) don't get concatenated.
+        if "@" in number:
+            number = number.split("@", 1)[0]
+        if number.lower().startswith("sip:"):
+            number = number[4:]
+
         # Remove all non-digit characters
         digits = "".join(c for c in number if c.isdigit())
 

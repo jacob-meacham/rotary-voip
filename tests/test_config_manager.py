@@ -286,6 +286,12 @@ def test_allowlist_normalizes_phone_numbers() -> None:
         # Test with formatting characters
         assert config.is_allowed("(406) 555-1234") is True
         assert config.is_allowed("406-555-1234") is True
+
+        # Test SIP URI formats (caller IDs from pyVoIP arrive as full SIP URIs)
+        assert config.is_allowed("sip:4065551234@208.100.60.41") is True
+        assert config.is_allowed("sip:14065551234@example.com:5060") is True
+        assert config.is_allowed("sip:+14065551234@example.com") is True
+        assert config.is_allowed("sip:4065559999@208.100.60.41") is False
     finally:
         Path(config_path).unlink()
 
