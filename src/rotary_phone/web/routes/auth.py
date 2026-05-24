@@ -43,7 +43,8 @@ async def login(request: Request) -> JSONResponse:
             raise HTTPException(status_code=400, detail="Username and password required")
 
         # Authenticate
-        session_id = auth_manager.login(username, password)
+        current_session_id = request.cookies.get("session_id")
+        session_id = await auth_manager.login(username, password, current_session_id)
         if not session_id:
             raise HTTPException(status_code=401, detail="Invalid username or password")
 

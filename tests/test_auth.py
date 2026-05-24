@@ -1,5 +1,6 @@
 """Tests for the authentication module."""
 
+import asyncio
 import tempfile
 from datetime import UTC, datetime, timedelta
 from unittest.mock import MagicMock, patch
@@ -145,53 +146,36 @@ class TestAuthManager:
         assert auth.database == temp_db
         assert auth.sessions._timeout == timedelta(minutes=30)
 
-    def test_verify_password_correct(self) -> None:
-        """Test password verification with correct password."""
-        auth = AuthManager(MagicMock())
-        password = "correctpassword"
-        password_hash = bcrypt.hashpw(password.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
-
-        assert auth.verify_password(password, password_hash) is True
-
-    def test_verify_password_incorrect(self) -> None:
-        """Test password verification with incorrect password."""
-        auth = AuthManager(MagicMock())
-        password_hash = bcrypt.hashpw(b"correctpassword", bcrypt.gensalt()).decode("utf-8")
-
-        assert auth.verify_password("wrongpassword", password_hash) is False
-
-    def test_verify_password_invalid_hash(self) -> None:
-        """Test password verification with invalid hash."""
-        auth = AuthManager(MagicMock())
-
-        assert auth.verify_password("password", "invalid-hash") is False
-
-    def test_login_success(self, temp_db: Database, test_user: User) -> None:
+    @pytest.mark.asyncio
+    async def test_login_success(self, temp_db: Database, test_user: User) -> None:
         """Test successful login."""
         auth = AuthManager(temp_db)
 
-        session_id = auth.login("testuser", "testpassword123")
+        session_id = await auth.login("testuser", "testpassword123")
 
         assert session_id is not None
         assert len(session_id) > 20
 
-    def test_login_user_not_found(self, temp_db: Database) -> None:
+    @pytest.mark.asyncio
+    async def test_login_user_not_found(self, temp_db: Database) -> None:
         """Test login with non-existent user."""
         auth = AuthManager(temp_db)
 
-        session_id = auth.login("nonexistent", "password")
+        session_id = await auth.login("nonexistent", "password")
 
         assert session_id is None
 
-    def test_login_wrong_password(self, temp_db: Database, test_user: User) -> None:
+    @pytest.mark.asyncio
+    async def test_login_wrong_password(self, temp_db: Database, test_user: User) -> None:
         """Test login with wrong password."""
         auth = AuthManager(temp_db)
 
-        session_id = auth.login("testuser", "wrongpassword")
+        session_id = await auth.login("testuser", "wrongpassword")
 
         assert session_id is None
 
-    def test_login_user_without_id(self, temp_db: Database) -> None:
+    @pytest.mark.asyncio
+    async def test_login_user_without_id(self, temp_db: Database) -> None:
         """Test login when user has no ID (edge case)."""
         auth = AuthManager(temp_db)
 
@@ -205,24 +189,26 @@ class TestAuthManager:
         )
         auth.database.get_user_by_username = MagicMock(return_value=user_without_id)
 
-        session_id = auth.login("noIdUser", "password")
+        session_id = await auth.login("noIdUser", "password")
 
         assert session_id is None
 
-    def test_logout(self, temp_db: Database, test_user: User) -> None:
+    @pytest.mark.asyncio
+    async def test_logout(self, temp_db: Database, test_user: User) -> None:
         """Test logout."""
         auth = AuthManager(temp_db)
-        session_id = auth.login("testuser", "testpassword123")
+        session_id = await auth.login("testuser", "testpassword123")
 
         auth.logout(session_id)
 
         # Session should be gone
         assert auth.sessions.get_user_id(session_id) is None
 
-    def test_get_current_user_valid_session(self, temp_db: Database, test_user: User) -> None:
+    @pytest.mark.asyncio
+    async def test_get_current_user_valid_session(self, temp_db: Database, test_user: User) -> None:
         """Test getting current user with valid session."""
         auth = AuthManager(temp_db)
-        session_id = auth.login("testuser", "testpassword123")
+        session_id = await auth.login("testuser", "testpassword123")
 
         user = auth.get_current_user(session_id)
 
@@ -245,10 +231,13 @@ class TestAuthManager:
 
         assert user is None
 
-    def test_get_current_user_expired_session(self, temp_db: Database, test_user: User) -> None:
+    @pytest.mark.asyncio
+    async def test_get_current_user_expired_session(
+        self, temp_db: Database, test_user: User
+    ) -> None:
         """Test getting current user with expired session."""
         auth = AuthManager(temp_db, session_timeout_minutes=1)
-        session_id = auth.login("testuser", "testpassword123")
+        session_id = await auth.login("testuser", "testpassword123")
 
         # Manually expire the session
         auth.sessions._sessions[session_id] = (
@@ -259,6 +248,50 @@ class TestAuthManager:
         user = auth.get_current_user(session_id)
 
         assert user is None
+
+    @pytest.mark.asyncio
+    async def test_login_runs_bcrypt_even_for_missing_user(self, mocker, temp_db) -> None:
+        """Timing-attack guard: bcrypt.checkpw must be called regardless of
+        whether the username exists, so an attacker can't enumerate users
+        by measuring response times."""
+        check_spy = mocker.spy(bcrypt, "checkpw")
+
+        manager = AuthManager(temp_db)
+        result = await manager.login("nobody-exists", "anything")
+
+        assert result is None
+        assert check_spy.call_count == 1, "bcrypt must run for unknown users too"
+
+    @pytest.mark.asyncio
+    async def test_login_rotates_session_when_cookie_present(self, temp_db, test_user) -> None:
+        """Calling login with a prior session_id invalidates it and mints a
+        fresh one — defends against session fixation."""
+        manager = AuthManager(temp_db)
+
+        first = await manager.login(test_user.username, "testpassword123")
+        assert first is not None
+        assert manager.sessions.get_user_id(first) == test_user.id
+
+        second = await manager.login(
+            test_user.username, "testpassword123", current_session_id=first
+        )
+
+        assert second is not None
+        assert second != first
+        assert manager.sessions.get_user_id(first) is None, "old session must be invalidated"
+        assert manager.sessions.get_user_id(second) == test_user.id
+
+    @pytest.mark.asyncio
+    async def test_login_does_not_block_event_loop(self, mocker, temp_db, test_user) -> None:
+        """login() must run bcrypt in a worker thread so the event loop stays
+        responsive. Use mocker to confirm asyncio.to_thread is invoked."""
+        to_thread_spy = mocker.spy(asyncio, "to_thread")
+
+        manager = AuthManager(temp_db)
+        await manager.login(test_user.username, "testpassword123")
+
+        # The first to_thread call should be for bcrypt.checkpw.
+        assert to_thread_spy.call_count >= 1
 
 
 class TestRequireAuth:

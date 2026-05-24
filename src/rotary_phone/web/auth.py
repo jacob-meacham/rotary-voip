@@ -2,10 +2,11 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import secrets
 from datetime import UTC, datetime, timedelta
-from typing import Dict, Optional
+from typing import Dict, Final, Optional
 
 import bcrypt
 from fastapi import Cookie, HTTPException, Request
@@ -14,6 +15,11 @@ from rotary_phone.database.database import Database
 from rotary_phone.database.models import User
 
 logger = logging.getLogger(__name__)
+
+# Pre-computed bcrypt hash used to equalize the timing of failed logins
+# regardless of whether the username exists. Computed once at module load
+# (~100ms one-time cost) so login() doesn't reveal user-existence via timing.
+_DUMMY_HASH: Final[bytes] = bcrypt.hashpw(b"dummy", bcrypt.gensalt())
 
 
 class SessionStore:
@@ -107,49 +113,42 @@ class AuthManager:
         self.database = database
         self.sessions = SessionStore(timeout_minutes=session_timeout_minutes)
 
-    def verify_password(self, password: str, password_hash: str) -> bool:
-        """Verify a password against its hash.
+    async def login(
+        self,
+        username: str,
+        password: str,
+        current_session_id: Optional[str] = None,
+    ) -> Optional[str]:
+        """Authenticate user and create a new session.
 
-        Args:
-            password: Plain text password
-            password_hash: Bcrypt hashed password
+        Always runs bcrypt — even when the username is unknown — so that
+        timing doesn't reveal user existence. Runs bcrypt in a worker thread
+        so the FastAPI event loop isn't blocked for ~100ms per attempt.
 
-        Returns:
-            True if password matches, False otherwise
+        If current_session_id is provided (i.e. the request already had a
+        session cookie), that session is invalidated before the new one is
+        minted — defends against session-fixation.
         """
-        try:
-            return bcrypt.checkpw(password.encode("utf-8"), password_hash.encode("utf-8"))
-        except Exception as e:
-            logger.warning("Password verification error: %s", e)
-            return False
-
-    def login(self, username: str, password: str) -> Optional[str]:
-        """Authenticate user and create session.
-
-        Args:
-            username: Username
-            password: Plain text password
-
-        Returns:
-            Session ID if authentication successful, None otherwise
-        """
-        # Get user from database
+        password_bytes = password.encode("utf-8")
         user = self.database.get_user_by_username(username)
-        if not user:
-            logger.warning("Login failed: user not found: %s", username)
+
+        if user is None or user.id is None:
+            # Run bcrypt anyway to keep the timing flat — prevents enumeration.
+            await asyncio.to_thread(bcrypt.checkpw, password_bytes, _DUMMY_HASH)
+            logger.warning("Login failed: user not found or has no id: %s", username)
             return None
 
-        # Verify password
-        if not self.verify_password(password, user.password_hash):
+        password_ok = await asyncio.to_thread(
+            bcrypt.checkpw, password_bytes, user.password_hash.encode("utf-8")
+        )
+        if not password_ok:
             logger.warning("Login failed: invalid password for user: %s", username)
             return None
 
-        # User from database always has an id
-        if user.id is None:
-            logger.error("User %s has no id", username)
-            return None
+        # Rotate: invalidate any prior session before minting a new one.
+        if current_session_id:
+            self.sessions.delete_session(current_session_id)
 
-        # Create session
         session_id = self.sessions.create_session(user.id)
         logger.info("User logged in: %s (user_id=%d)", username, user.id)
         return session_id
