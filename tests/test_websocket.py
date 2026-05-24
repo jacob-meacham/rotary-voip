@@ -1,6 +1,7 @@
 """Tests for the WebSocket module."""
 
 import asyncio
+import json
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -113,15 +114,18 @@ class TestWebSocketEvents:
         assert event.type == EventType.CALL_LOG_UPDATED
         assert event.data["call_id"] == 42
 
-    def test_event_json_serialization(self) -> None:
-        """Test that events can be serialized to JSON."""
-        event = CallStartedEvent(direction="outbound", number="123")
+    def test_event_json_serialization_round_trip(self) -> None:
+        """model_dump_json() emits a JSON object with the expected structural
+        keys and values — not a free-form string we happen to substring-match.
+        """
+        event = CallStartedEvent(direction="outbound", number="+15551234567")
 
-        json_str = event.model_dump_json()
+        parsed = json.loads(event.model_dump_json())
 
-        assert "call_started" in json_str
-        assert "outbound" in json_str
-        assert "123" in json_str
+        assert parsed["type"] == "call_started"
+        assert parsed["data"]["direction"] == "outbound"
+        assert parsed["data"]["number"] == "+15551234567"
+        assert parsed["timestamp"].endswith("Z")
 
 
 class TestConnectionManager:
