@@ -12,7 +12,7 @@ Overall grade: **B+ / 3.4 GPA** — solid engineering for a hobby project, with 
 | 2 | Pervasive `except Exception` swallow-and-log | ✅ Fixed for original-scope files — `call_manager.py` (`1a2daf0`), `pyvoip_client.py` (`2823fa0` + `52e2384`, all 8 sites now typed), `audio_handler.py` (`3d8cb41`, 8 of 10 narrowed, 2 kept broad with `# pylint: disable=broad-except` for per-frame pyVoIP I/O). The staff review specifically named these three files; broad excepts in `web/routes/*`, `network/*`, `main.py`, etc. remain but are scoped to different concerns (HTTP-handler → 500, subprocess error catch-alls) and weren't part of item #2. |
 | 3 | Race in `PyVoIPClient._call_state_monitor` | ✅ Fixed in `2823fa0` |
 | 4 | 0-duration `call_ended` event | ✅ Fixed in `1a2daf0` |
-| 5 | `send_audio_file` 100-line method + `elapsed` overshoot | ❌ Untouched |
+| 5 | `send_audio_file` 100-line method + `elapsed` overshoot | ✅ Fixed in `2823fa0` (split into `_decode_wav_to_ulaw` + `_wait_for_audio`; overshoot eliminated by switching to monotonic deadline + `remaining = deadline - time.monotonic()`) |
 | 6 | `MockGPIO.set_input` indentation bug | ⚠️ Cosmetic-only (blank line removed in `46bc63a`; actual indentation still wrong — debug log still gated by `if callback_to_call`) |
 | 7 | `@app.on_event` deprecation → lifespan | ✅ Fixed in `adf8f5b` |
 | 8 | Config save endpoint write-and-reload | ❌ Untouched |
@@ -23,7 +23,7 @@ Overall grade: **B+ / 3.4 GPA** — solid engineering for a hobby project, with 
 | 9e | `network_monitor` TCP-to-53 probe semantic | ⚠️ Documented in `46bc63a`; probe itself unchanged |
 | 9f | `time.sleep(0.15)` flakiness in integration fixture | ❌ Untouched |
 
-**Priority list status:** 1, 2, 3, 4, 5 (lifespan), 6 (the `_on_off_hook` half) done; send_audio_file half of #6 pending. **Item #2 now fully fixed for the three files the staff review called out.**
+**Priority list status:** 1, 2, 3, 4, 5 (lifespan), 6 (the `_on_off_hook` half), and the priority-list item "send_audio_file split" all done. **Items #2 and #5 fully resolved.**
 
 ### Also addressed this session (not in original review)
 - Eight worthless tests deleted per constitution §12 (`98b9a31`–`665da00`).
