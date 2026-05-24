@@ -48,6 +48,13 @@ async def login(request: Request) -> JSONResponse:
         if not session_id:
             raise HTTPException(status_code=401, detail="Invalid username or password")
 
+        # secure=True only when SSL is configured — otherwise the cookie
+        # would never be set in HTTP-only LAN deployments.
+        config_manager = request.app.state.config_manager
+        use_secure = bool(
+            config_manager.get("web.ssl_certfile") and config_manager.get("web.ssl_keyfile")
+        )
+
         # Return success with session cookie
         response = JSONResponse(content={"success": True, "message": "Logged in successfully"})
         response.set_cookie(
@@ -56,6 +63,7 @@ async def login(request: Request) -> JSONResponse:
             httponly=True,
             max_age=3600,  # 1 hour
             samesite="lax",
+            secure=use_secure,
         )
         return response
 
