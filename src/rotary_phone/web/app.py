@@ -243,7 +243,7 @@ def create_app(
         """Serve login page."""
         return FileResponse(static_dir / "login.html")
 
-    @app.get("/api/status")
+    @app.get("/api/status", dependencies=_protected)
     async def get_status() -> Dict[str, Any]:
         """Get current phone status."""
         cm = app.state.call_manager
@@ -260,13 +260,13 @@ def create_app(
             },
         }
 
-    @app.get("/api/config")
+    @app.get("/api/config", dependencies=_protected)
     async def get_config() -> Dict[str, Any]:
         """Get current configuration (with sensitive data masked)."""
         result: Dict[str, Any] = app.state.config_manager.to_dict_safe()
         return result
 
-    @app.get("/api/config/raw")
+    @app.get("/api/config/raw", dependencies=_protected)
     async def get_config_raw() -> PlainTextResponse:
         """Get raw configuration file content."""
         try:
@@ -278,7 +278,7 @@ def create_app(
         except IOError as e:
             raise HTTPException(status_code=500, detail=f"Failed to read config: {e}") from e
 
-    @app.post("/api/config")
+    @app.post("/api/config", dependencies=_protected)
     async def save_config(request: Request) -> Dict[str, Any]:
         """Save configuration file. Accepts raw YAML text."""
         try:

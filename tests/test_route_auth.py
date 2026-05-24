@@ -32,6 +32,12 @@ PROTECTED_ENDPOINTS: list[tuple[str, str]] = [
     ("GET", "/api/allowlist"),  # allowlist_router
     ("GET", "/api/speed-dial"),  # speed_dial_router
     ("GET", "/api/network/status"),  # network_router
+    # Inline @app.* routes — these aren't on a router, so they were missed
+    # by the router-level wiring and need their own explicit dependencies.
+    ("GET", "/api/status"),
+    ("GET", "/api/config"),
+    ("GET", "/api/config/raw"),
+    ("POST", "/api/config"),
 ]
 
 
