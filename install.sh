@@ -74,6 +74,7 @@ apt-get install -y \
     python3 python3-pip python3-venv \
     python3-lgpio \
     python3-numpy python3-scipy \
+    python3-uvloop python3-httptools \
     alsa-utils \
     portaudio19-dev \
     hostapd dnsmasq \
