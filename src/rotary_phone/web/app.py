@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import Any, AsyncIterator, Dict, Optional
 
 import yaml
-from fastapi import FastAPI, HTTPException, Request, WebSocket, WebSocketDisconnect
+from fastapi import Depends, FastAPI, HTTPException, Request, WebSocket, WebSocketDisconnect
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import FileResponse, JSONResponse, PlainTextResponse
 from fastapi.staticfiles import StaticFiles
@@ -21,7 +21,7 @@ from rotary_phone.call_manager import CallManager
 from rotary_phone.config import ConfigManager
 from rotary_phone.config.config_manager import ConfigError
 from rotary_phone.database import Database
-from rotary_phone.web.auth import AuthManager
+from rotary_phone.web.auth import AuthManager, require_auth
 from rotary_phone.web.log_buffer import get_log_buffer, install_log_handler
 from rotary_phone.web.rate_limiter import limiter
 from rotary_phone.web.routes import (
@@ -184,15 +184,20 @@ def create_app(
     if static_dir.exists():
         app.mount("/static", StaticFiles(directory=str(static_dir)), name="static")
 
-    # Include routers from route modules
-    app.include_router(auth_router)
-    app.include_router(sounds_router)
-    app.include_router(settings_router)
-    app.include_router(logs_router)
-    app.include_router(calls_router)
-    app.include_router(allowlist_router)
-    app.include_router(speed_dial_router)
-    app.include_router(network_router)
+    # Include routers from route modules.
+    # Every router except the auth router itself requires a valid session cookie.
+    # Adding the dependency here (rather than per-route) guarantees a new endpoint
+    # can't be accidentally exposed.
+    _protected = [Depends(require_auth)]
+
+    app.include_router(auth_router)  # NOT protected — login can't require login
+    app.include_router(sounds_router, dependencies=_protected)
+    app.include_router(settings_router, dependencies=_protected)
+    app.include_router(logs_router, dependencies=_protected)
+    app.include_router(calls_router, dependencies=_protected)
+    app.include_router(allowlist_router, dependencies=_protected)
+    app.include_router(speed_dial_router, dependencies=_protected)
+    app.include_router(network_router, dependencies=_protected)
 
     # -------------------------------------------------------------------------
     # WebSocket Endpoint

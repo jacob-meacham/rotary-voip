@@ -1,5 +1,6 @@
 """Tests for the speed dial API endpoints."""
 
+from datetime import UTC, datetime
 from unittest.mock import MagicMock
 
 import pytest
@@ -7,8 +8,17 @@ from fastapi.testclient import TestClient
 
 from rotary_phone.call_manager import CallManager, PhoneState
 from rotary_phone.config import ConfigManager
+from rotary_phone.database.models import User
 from rotary_phone.web.app import create_app
+from rotary_phone.web.auth import require_auth
 from rotary_phone.web.models import _is_valid_speed_dial_code
+
+_FAKE_USER = User(
+    id=1,
+    username="test",
+    password_hash="x",
+    created_at=datetime.now(UTC),
+)
 
 
 @pytest.fixture
@@ -61,6 +71,7 @@ def test_client(config_file, mock_call_manager):
         config_manager=config_manager,
         config_path=config_file,
     )
+    app.dependency_overrides[require_auth] = lambda: _FAKE_USER
     return TestClient(app)
 
 
@@ -106,6 +117,7 @@ allowlist:
             config_manager=config_manager,
             config_path=str(config_path),
         )
+        app.dependency_overrides[require_auth] = lambda: _FAKE_USER
         client = TestClient(app)
 
         response = client.get("/api/speed-dial")
