@@ -383,6 +383,7 @@ class CallManager:  # pylint: disable=too-many-instance-attributes
 
             # Transition to DIALING if this is the first digit
             if self._state == PhoneState.OFF_HOOK_WAITING:
+                logger.info("Dialing started")
                 # Stop dial tone when user starts dialing
                 if self._dial_tone:
                     self._dial_tone.stop()
@@ -390,7 +391,7 @@ class CallManager:  # pylint: disable=too-many-instance-attributes
 
             # Append digit
             self._dialed_number += digit
-            logger.info("Dialed so far: %s", self._dialed_number)
+            logger.info("Dialed digit '%s' (so far: %s)", digit, self._dialed_number)
 
             # Emit digit dialed event
             self._emit_event(

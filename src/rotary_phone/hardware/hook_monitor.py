@@ -180,7 +180,11 @@ class HookMonitor:
             self._pending_state = None
             self._debounce_timer = None
 
-            logger.info("Hook state changed: %s -> %s", old_state.value, new_state.value)
+            if new_state == HookState.OFF_HOOK:
+                logger.info("Phone went off-hook (handset lifted)")
+            else:
+                logger.info("Phone went on-hook (handset hung up)")
+            logger.debug("Hook state transition: %s -> %s", old_state.value, new_state.value)
 
         # Call callbacks outside of lock
         if new_state == HookState.OFF_HOOK and self._on_off_hook:
