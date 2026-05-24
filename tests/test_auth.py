@@ -262,40 +262,35 @@ class TestAuthManager:
 
 
 class TestRequireAuth:
-    """Tests for the require_auth dependency."""
+    """Tests for the require_auth FastAPI dependency."""
 
     @pytest.mark.asyncio
-    async def test_require_auth_valid_session(self, temp_db: Database, test_user: User) -> None:
-        """Test require_auth with valid session."""
-        auth = AuthManager(temp_db)
-        session_id = auth.login("testuser", "testpassword123")
+    async def test_returns_user_for_valid_session(self, test_user: User) -> None:
+        request = MagicMock()
+        request.app.state.auth_manager.get_current_user.return_value = test_user
 
-        dependency = require_auth(auth)
-        user = await dependency(session_id=session_id)
+        result = await require_auth(request=request, session_id="valid-session-id")
 
-        assert user.username == "testuser"
+        assert result is test_user
+        request.app.state.auth_manager.get_current_user.assert_called_once_with("valid-session-id")
 
     @pytest.mark.asyncio
-    async def test_require_auth_no_session(self, temp_db: Database) -> None:
-        """Test require_auth with no session raises HTTPException."""
-        auth = AuthManager(temp_db)
-
-        dependency = require_auth(auth)
+    async def test_raises_401_when_no_cookie(self) -> None:
+        request = MagicMock()
+        request.app.state.auth_manager.get_current_user.return_value = None
 
         with pytest.raises(HTTPException) as exc_info:
-            await dependency(session_id=None)
+            await require_auth(request=request, session_id=None)
 
         assert exc_info.value.status_code == 401
         assert exc_info.value.detail == "Not authenticated"
 
     @pytest.mark.asyncio
-    async def test_require_auth_invalid_session(self, temp_db: Database) -> None:
-        """Test require_auth with invalid session raises HTTPException."""
-        auth = AuthManager(temp_db)
-
-        dependency = require_auth(auth)
+    async def test_raises_401_when_session_invalid(self) -> None:
+        request = MagicMock()
+        request.app.state.auth_manager.get_current_user.return_value = None
 
         with pytest.raises(HTTPException) as exc_info:
-            await dependency(session_id="invalid-session")
+            await require_auth(request=request, session_id="expired-or-fake")
 
         assert exc_info.value.status_code == 401

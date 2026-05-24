@@ -5,10 +5,10 @@ from __future__ import annotations
 import logging
 import secrets
 from datetime import UTC, datetime, timedelta
-from typing import Callable, Coroutine, Dict, Optional, Any
+from typing import Dict, Optional
 
 import bcrypt
-from fastapi import Cookie, HTTPException, status
+from fastapi import Cookie, HTTPException, Request
 
 from rotary_phone.database.database import Database
 from rotary_phone.database.models import User
@@ -181,38 +181,17 @@ class AuthManager:
         return self.database.get_user(user_id)
 
 
-# FastAPI dependency for requiring authentication
-def require_auth(
-    auth_manager: AuthManager,
-) -> Callable[..., Coroutine[Any, Any, User]]:
-    """Create a FastAPI dependency that requires authentication.
+async def require_auth(
+    request: Request,
+    session_id: Optional[str] = Cookie(None, alias="session_id"),
+) -> User:
+    """FastAPI dependency: returns the current User or raises 401.
 
-    Args:
-        auth_manager: AuthManager instance
-
-    Returns:
-        Dependency function
+    Pulls AuthManager off request.app.state so routes can use
+    Depends(require_auth) directly without a factory closure.
     """
-
-    async def dependency(session_id: Optional[str] = Cookie(None, alias="session_id")) -> User:
-        """Check if user is authenticated.
-
-        Args:
-            session_id: Session ID from cookie
-
-        Returns:
-            Current user
-
-        Raises:
-            HTTPException: If not authenticated
-        """
-        user = auth_manager.get_current_user(session_id)
-        if not user:
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Not authenticated",
-                headers={"WWW-Authenticate": "Bearer"},
-            )
-        return user
-
-    return dependency
+    auth_manager: AuthManager = request.app.state.auth_manager
+    user = auth_manager.get_current_user(session_id)
+    if user is None:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+    return user
