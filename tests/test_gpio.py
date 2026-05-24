@@ -231,34 +231,42 @@ def test_mock_gpio_error_write_to_input() -> None:
         gpio.output(HOOK, GPIO.HIGH)
 
 
-def test_mock_gpio_thread_safety() -> None:
-    """Test that GPIO operations are thread-safe."""
+def test_mock_gpio_thread_safety_leaves_pin_in_consistent_state() -> None:
+    """Under concurrent reads and writes, MockGPIO must (a) never raise from
+    either side and (b) leave the pin in one of the values writers actually
+    wrote. A torn read returning some garbage int (or None) would mean the
+    internal dict was being mutated mid-read without locking."""
     gpio = MockGPIO()
     gpio.setmode(GPIO.BCM)
     gpio.setup(HOOK, GPIO.IN, pull_up_down=GPIO.PUD_UP)
 
-    errors = []
+    errors: list[Exception] = []
+    observed_reads: list[int] = []
 
     def reader() -> None:
         try:
             for _ in range(100):
-                gpio.input(HOOK)
-        except Exception as e:
+                observed_reads.append(gpio.input(HOOK))
+        except Exception as e:  # noqa: BLE001 — capturing for test assertion
             errors.append(e)
 
     def writer() -> None:
         try:
             for i in range(100):
                 gpio.set_input(HOOK, i % 2)
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 — capturing for test assertion
             errors.append(e)
 
     threads = [threading.Thread(target=reader) for _ in range(5)]
     threads.extend([threading.Thread(target=writer) for _ in range(5)])
-
     for t in threads:
         t.start()
     for t in threads:
         t.join()
 
-    assert len(errors) == 0
+    # No exceptions on either side
+    assert errors == [], f"thread errors: {errors!r}"
+    # Every read returned one of the two values a writer could have written
+    assert set(observed_reads) <= {0, 1}, f"saw unexpected reads: {set(observed_reads)}"
+    # The final pin value matches the last write (writers' last iteration is i=99 -> 1)
+    assert gpio.input(HOOK) == 1
