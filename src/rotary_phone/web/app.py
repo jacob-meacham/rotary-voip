@@ -34,6 +34,7 @@ from rotary_phone.web.routes import (
     speed_dial_router,
 )
 from rotary_phone.web.websocket import (
+    CallAnsweredEvent,
     CallEndedEvent,
     CallRejectedEvent,
     CallStartedEvent,
@@ -162,6 +163,11 @@ def create_app(
                     direction=data["direction"],
                     number=data["number"],
                 )
+            elif event_type == "call_answered":
+                event = CallAnsweredEvent(
+                    direction=data["direction"],
+                    number=data["number"],
+                )
             elif event_type == "call_ended":
                 event = CallEndedEvent(
                     direction=data["direction"],
@@ -181,7 +187,9 @@ def create_app(
                     number_so_far=data["number_so_far"],
                 )
             else:
-                logger.warning("Unknown event type from CallManager: %s", event_type)
+                # Other events (e.g. call_attempt_cancelled) aren't broadcast
+                # to the UI right now; log at debug so it's not noisy.
+                logger.debug("CallManager event not broadcast to WebSocket: %s", event_type)
                 return
 
             # Broadcast to all connected WebSocket clients

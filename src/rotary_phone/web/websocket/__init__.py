@@ -1,6 +1,7 @@
 """WebSocket support for real-time updates."""
 
 from .events import (
+    CallAnsweredEvent,
     CallEndedEvent,
     CallLogUpdatedEvent,
     CallRejectedEvent,
@@ -19,6 +20,7 @@ __all__ = [
     "WebSocketEvent",
     "PhoneStateChangedEvent",
     "CallStartedEvent",
+    "CallAnsweredEvent",
     "CallEndedEvent",
     "CallRejectedEvent",
     "DigitDialedEvent",

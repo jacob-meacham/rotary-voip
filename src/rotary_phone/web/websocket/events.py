@@ -14,6 +14,7 @@ class EventType(str, Enum):
 
     PHONE_STATE_CHANGED = "phone_state_changed"
     CALL_STARTED = "call_started"
+    CALL_ANSWERED = "call_answered"
     CALL_ENDED = "call_ended"
     CALL_REJECTED = "call_rejected"
     DIGIT_DIALED = "digit_dialed"
@@ -166,6 +167,33 @@ class ConfigChangedEvent(WebSocketEvent):
         super().__init__(
             data={
                 "section": section,
+            },
+            **kwargs,
+        )
+
+
+class CallAnsweredEvent(WebSocketEvent):
+    """Call answered event (either side picked up an active call)."""
+
+    type: EventType = EventType.CALL_ANSWERED
+
+    def __init__(
+        self,
+        direction: str,
+        number: str,
+        **kwargs: Any,
+    ):
+        """Initialize call answered event.
+
+        Args:
+            direction: Call direction (inbound/outbound)
+            number: Phone number
+            **kwargs: Additional fields
+        """
+        super().__init__(
+            data={
+                "direction": direction,
+                "number": number,
             },
             **kwargs,
         )
