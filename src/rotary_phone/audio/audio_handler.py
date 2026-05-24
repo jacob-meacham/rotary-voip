@@ -144,7 +144,7 @@ class AudioHandler:  # pylint: disable=too-many-instance-attributes
             except ImportError as e:
                 logger.error("PyAudio not installed: %s", e)
                 raise AudioError("PyAudio not installed") from e
-            except Exception as e:
+            except (OSError, RuntimeError) as e:
                 logger.error("Failed to initialize PyAudio: %s", e)
                 raise AudioError(f"Failed to initialize PyAudio: {e}") from e
 
@@ -234,7 +234,7 @@ class AudioHandler:  # pylint: disable=too-many-instance-attributes
         if self._pyaudio:
             try:
                 self._pyaudio.terminate()
-            except Exception as e:
+            except (OSError, RuntimeError) as e:
                 logger.warning("Error terminating PyAudio: %s", e)
             self._pyaudio = None
 
@@ -287,7 +287,7 @@ class AudioHandler:  # pylint: disable=too-many-instance-attributes
                         output_idx = i
                         logger.info("Selected output device: %s (index %d)", name, i)
 
-            except Exception as e:
+            except OSError as e:
                 logger.warning("Error getting device %d info: %s", i, e)
 
         # Fallback to default devices if USB not found
@@ -315,7 +315,7 @@ class AudioHandler:  # pylint: disable=too-many-instance-attributes
                         default_output.get("name"),
                         output_idx,
                     )
-            except Exception as e:
+            except OSError as e:
                 raise AudioDeviceNotFoundError(f"No audio devices available: {e}") from e
 
         return input_idx, output_idx
@@ -492,8 +492,11 @@ class AudioHandler:  # pylint: disable=too-many-instance-attributes
                     if self._voip_call:
                         try:
                             self._voip_call.write_audio(ulaw_data)
-                        except Exception as e:
-                            # Call may have ended
+                        except Exception as e:  # pylint: disable=broad-except
+                            # Why broad: any pyVoIP-call exception inside the per-frame write
+                            # should not kill the capture thread; the legitimate fail mode is
+                            # the remote call ending mid-transmission, which can surface as
+                            # arbitrary pyVoIP internal exceptions.
                             logger.debug("Error writing audio: %s", e)
                             break
 
@@ -501,7 +504,7 @@ class AudioHandler:  # pylint: disable=too-many-instance-attributes
                     # Handle buffer overflow gracefully
                     logger.debug("Capture buffer overflow: %s", e)
 
-        except Exception as e:
+        except (OSError, ValueError) as e:
             logger.error("Capture thread error: %s", e)
 
         finally:
@@ -509,7 +512,7 @@ class AudioHandler:  # pylint: disable=too-many-instance-attributes
                 try:
                     stream.stop_stream()
                     stream.close()
-                except Exception as e:
+                except OSError as e:
                     logger.warning("Error closing capture stream: %s", e)
             logger.debug("Capture thread ended")
 
@@ -532,7 +535,11 @@ class AudioHandler:  # pylint: disable=too-many-instance-attributes
         try:
             # With the patches applied, read_audio() returns raw μ-law bytes.
             ulaw_data = self._voip_call.read_audio(VOIP_FRAME_SIZE, blocking=True)
-        except Exception as e:
+        except Exception as e:  # pylint: disable=broad-except
+            # Why broad: any pyVoIP-call exception inside the per-frame read should
+            # not kill the playback thread; the legitimate fail mode is the remote
+            # call ending mid-frame, which can surface as arbitrary pyVoIP internal
+            # exceptions.
             logger.debug("Error reading audio: %s", e)
             # Brief sleep to avoid busy loop on error
             time.sleep(0.02)
@@ -604,7 +611,7 @@ class AudioHandler:  # pylint: disable=too-many-instance-attributes
                     # Handle buffer underflow gracefully
                     logger.debug("Playback buffer underflow: %s", e)
 
-        except Exception as e:
+        except (OSError, ValueError) as e:
             logger.error("Playback thread error: %s", e)
 
         finally:
@@ -612,6 +619,6 @@ class AudioHandler:  # pylint: disable=too-many-instance-attributes
                 try:
                     stream.stop_stream()
                     stream.close()
-                except Exception as e:
+                except OSError as e:
                     logger.warning("Error closing playback stream: %s", e)
             logger.debug("Playback thread ended")
