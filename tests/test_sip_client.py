@@ -1,6 +1,7 @@
 """Tests for SIP client implementation."""
 
 import time
+from unittest.mock import Mock, call
 
 from rotary_phone.sip import CallState, InMemorySIPClient
 
@@ -236,81 +237,66 @@ def test_incoming_call_when_not_registered() -> None:
 # Tests - Callbacks
 
 
-def test_on_incoming_call_callback() -> None:
-    """Test on_incoming_call callback is triggered."""
-    calls = []
-
-    def on_incoming(caller_id: str) -> None:
-        calls.append(caller_id)
-
+def test_on_incoming_call_callback_fires_once_with_caller_id() -> None:
+    """simulate_incoming_call invokes on_incoming_call exactly once with the
+    caller id passed in."""
+    on_incoming = Mock()
     client = InMemorySIPClient(on_incoming_call=on_incoming)
     client.register("sip:user@example.com", "user", "password")
 
     client.simulate_incoming_call("5559876543")
 
-    assert len(calls) == 1
-    assert calls[0] == "5559876543"
+    on_incoming.assert_called_once_with("5559876543")
 
 
-def test_on_call_answered_callback_outgoing() -> None:
-    """Test on_call_answered callback for outgoing call."""
-    answered = []
-
-    def on_answered() -> None:
-        answered.append(True)
-
+def test_on_call_answered_fires_once_for_outgoing_call() -> None:
+    """make_call invokes on_call_answered exactly once (the in-memory client
+    auto-answers); the callback is invoked with no arguments."""
+    on_answered = Mock()
     client = InMemorySIPClient(on_call_answered=on_answered)
     client.register("sip:user@example.com", "user", "password")
 
     client.make_call("5551234567")
 
-    assert len(answered) == 1
+    on_answered.assert_called_once_with()
 
 
-def test_on_call_answered_callback_incoming() -> None:
-    """Test on_call_answered callback for incoming call."""
-    answered = []
-
-    def on_answered() -> None:
-        answered.append(True)
-
+def test_on_call_answered_fires_once_for_inbound_answer() -> None:
+    """answer_call on a ringing inbound call invokes on_call_answered exactly
+    once, with no arguments."""
+    on_answered = Mock()
     client = InMemorySIPClient(on_call_answered=on_answered)
     client.register("sip:user@example.com", "user", "password")
     client.simulate_incoming_call("5559876543")
 
     client.answer_call()
 
-    assert len(answered) == 1
+    on_answered.assert_called_once_with()
 
 
-def test_on_call_ended_callback() -> None:
-    """Test on_call_ended callback is triggered."""
-    ended = []
-
-    def on_ended() -> None:
-        ended.append(True)
-
+def test_on_call_ended_fires_once_with_no_args_after_hangup() -> None:
+    """hangup() invokes on_call_ended exactly once with no arguments."""
+    on_ended = Mock()
     client = InMemorySIPClient(on_call_ended=on_ended)
     client.register("sip:user@example.com", "user", "password")
     client.make_call("5551234567")
 
     client.hangup()
 
-    assert len(ended) == 1
+    on_ended.assert_called_once_with()
 
 
-def test_multiple_callbacks() -> None:
-    """Test multiple callbacks in sequence."""
-    events: list[tuple[str, ...]] = []
-
-    def on_incoming(caller_id: str) -> None:
-        events.append(("incoming", caller_id))
-
-    def on_answered() -> None:
-        events.append(("answered",))
-
-    def on_ended() -> None:
-        events.append(("ended",))
+def test_callbacks_fire_in_order_incoming_then_answered_then_ended() -> None:
+    """A full incoming-call lifecycle invokes the callbacks in the documented
+    order: on_incoming_call(caller_id) -> on_call_answered() -> on_call_ended().
+    """
+    on_incoming = Mock()
+    on_answered = Mock()
+    on_ended = Mock()
+    parent = Mock()
+    parent.attach_mock(on_incoming, "incoming")
+    parent.attach_mock(on_answered, "answered")
+    parent.attach_mock(on_ended, "ended")
 
     client = InMemorySIPClient(
         on_incoming_call=on_incoming,
@@ -319,15 +305,15 @@ def test_multiple_callbacks() -> None:
     )
     client.register("sip:user@example.com", "user", "password")
 
-    # Simulate incoming call -> answer -> hangup
     client.simulate_incoming_call("5559876543")
     client.answer_call()
     client.hangup()
 
-    assert len(events) == 3
-    assert events[0] == ("incoming", "5559876543")
-    assert events[1] == ("answered",)
-    assert events[2] == ("ended",)
+    assert parent.mock_calls == [
+        call.incoming("5559876543"),
+        call.answered(),
+        call.ended(),
+    ]
 
 
 # Tests - Edge Cases
