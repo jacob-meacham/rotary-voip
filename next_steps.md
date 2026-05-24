@@ -31,8 +31,39 @@ Overall grade: **B+ / 3.4 GPA** — solid engineering for a hobby project, with 
 - Pre-existing CI failure resolved (slowapi/Starlette typing mismatch, `e538f0d`).
 - Battery scope removed from docs + handset-element BOM (`ae40052`).
 
-### Queued for next plan
-- **Finish-auth plan** (`docs/superpowers/plans/2026-05-23-finish-auth.md`) — wires `require_auth` to every protected router, adds WS auth, fixes login timing/blocking/session-fixation, conditional `secure` cookie, integration tests, bootstrap UX. Addresses the #1 critical from my opening staff review (admin interface had zero enforcement).
+---
+
+## Status as of 2026-05-24 — finish-auth landed
+
+The `finish-auth` plan executed end-to-end in 10 commits (`5787381`..`643a2f8`). Constitution §11 ("every endpoint enforces auth, no exceptions") is now satisfied.
+
+| Concern | Status |
+|---|---|
+| `require_auth` defined but never wired | ✅ Wired to all 7 protected routers (`38db946`) |
+| Inline `@app.*` API routes (`/api/status`, `/api/config` GET/POST, `/api/config/raw`) unprotected | ✅ Wired (`643a2f8`, caught by final review) |
+| `/ws` WebSocket unauthenticated | ✅ Cookie-session check before accept; closes with code 4401 on failure (`d55086b`) |
+| Frontend reconnect loop on 4401 | ✅ Redirects to `/login` instead of looping (`4afb42d`) |
+| Login timing attack (early return on missing user, fast vs. ~100ms bcrypt) | ✅ `_DUMMY_HASH` + always-run bcrypt (`e796f29`) |
+| bcrypt blocks the FastAPI event loop | ✅ Wrapped in `asyncio.to_thread` (`e796f29`) |
+| Session fixation (no rotation on login) | ✅ Old session invalidated before minting new (`e796f29`) |
+| Cookie missing `secure=True` | ✅ Conditional on SSL config (`b95a354`) |
+| No integration tests proving the gate | ✅ 17 parametrized tests in `tests/test_route_auth.py` (`eef4abd`) — 25 total after the `643a2f8` extension |
+| Fresh-deploy lockout (zero users in DB) | ✅ Startup WARNING + README/CLAUDE.md docs (`690b0ae`) |
+
+**Test count:** 279 → 304 (+25). **Coverage:** `web/auth.py` 100%, `web/routes/auth.py` 34% → 70%, `web/app.py` 52% → 66%, total 55% → 59%. **`./check.sh`:** ✅.
+
+### Minor follow-ups surfaced during finish-auth (none blocking)
+
+- **WS handler defense-in-depth.** `websocket_endpoint` accesses `websocket.app.state.auth_manager` unconditionally. If `create_app` is ever called without `database=`, `auth_manager` isn't on state and the first WS connection raises `AttributeError`. Add a `hasattr` guard or 503-on-missing.
+- **`_FAKE_USER` duplication.** Defined identically in `tests/test_web_speed_dial.py`, `tests/test_web_allowlist.py`, and (implicitly) in `tests/test_route_auth.py`'s fixtures. Move to a shared fixture in `tests/conftest.py`.
+- **Sync DB call inside async `login()`.** `database.get_user_by_username` is sync SQLite called from an async function. ~1ms, not a real issue today, but inconsistent with the "async all the way down" stated principle.
+- **`bcrypt.checkpw` errors now propagate.** The deleted `verify_password` swallowed exceptions and returned False; the new `login()` lets bcrypt errors turn into 500. Arguably more correct, but worth a one-line code comment acknowledging the intentional change.
+- **`test_auth_routes_are_open` covers only `/api/auth/status`.** Doesn't verify that `/api/auth/login` and `/logout` stay open. A regression that accidentally protected `auth_router` would be caught only by login failing inside the `authed_cookie` fixture (loud but indirect).
+- **WS acceptance test asserts only "handshake succeeded".** Doesn't send/receive a message. Sufficient for "gate let it through" but could be strengthened.
+
+### Safety-net deferred
+
+Considered (a) an introspection test that walks `app.routes` and asserts `require_auth` is in every `/api/*` dependency tree, and (b) a deny-by-default middleware. User declined both for now. If a route is ever added without the dependency, only manual review will catch it — risk accepted.
 
 ---
 
