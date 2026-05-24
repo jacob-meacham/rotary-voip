@@ -414,6 +414,12 @@ def test_inter_digit_timer_cancellation(call_manager):
 
     # Timers should be different
     assert first_timer != second_timer
+
+    # Timer.cancel() is asynchronous (it sets a finished-event the timer thread
+    # observes when it next wakes), so we have to join to wait for the thread
+    # to actually wind down before asserting is_alive(). Local runs were fast
+    # enough to race-win without this; CI's slower runners exposed the race.
+    first_timer.join(timeout=1.0)
     assert not first_timer.is_alive()  # First timer should be cancelled
 
 
