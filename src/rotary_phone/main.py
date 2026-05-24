@@ -516,6 +516,20 @@ def main() -> NoReturn:  # pylint: disable=too-many-statements,too-many-branches
     logger.info("Initializing call logging...")
     call_logger, database = _init_call_logging(config)
 
+    # Warn loudly if no web admin users exist — the interface is unreachable without one
+    if database is not None:
+        try:
+            if database.count_users() == 0:
+                logger.warning("=" * 60)
+                logger.warning("NO USERS IN DATABASE — web admin is unreachable.")
+                logger.warning(
+                    "Create one with: uv run python -m scripts.manage_users add <username>"
+                )
+                logger.warning("=" * 60)
+        except Exception as e:  # pylint: disable=broad-except
+            # Defensive: a count failure must never abort startup
+            logger.error("Could not check user count at startup: %s", e)
+
     # Initialize USB audio handler
     logger.info("Initializing audio handler...")
     audio_handler = _init_audio_handler(config, args.mock_gpio)

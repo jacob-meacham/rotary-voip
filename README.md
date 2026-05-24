@@ -69,6 +69,21 @@ To update to the latest version:
 sudo rotary-voip update
 ```
 
+### First-run user setup
+
+The web admin requires a login. Create your first user before starting
+the service:
+
+```bash
+uv run python -m scripts.manage_users add admin
+```
+
+You'll be prompted for a password. Repeat with different usernames to
+add more users.
+
+Forgot your password? Delete the user and add it again — passwords
+can't be recovered, only reset.
+
 ## Configuration
 
 Edit `/opt/rotary-phone/config.yml` (or `config.yml` for development):

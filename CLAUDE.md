@@ -407,6 +407,18 @@ pcm.!default {
 2. Check registration: `journalctl -u rotary-phone | grep -i registration`
 3. Test with linphonec manually to isolate SIP vs. hardware issues
 
+### Managing web admin users
+
+```bash
+uv run python -m scripts.manage_users add <username>
+uv run python -m scripts.manage_users list
+uv run python -m scripts.manage_users delete <username>
+```
+
+Users are stored in the SQLite database alongside call logs. Passwords
+are bcrypt-hashed. The app refuses to be useful with zero users — a
+loud startup warning fires if `count_users() == 0`.
+
 ## Dependencies
 
 ### Core Python Packages
