@@ -293,6 +293,9 @@ class PyVoIPClient(SIPClient):
 
     def hangup(self) -> None:
         """Hang up the current call."""
+        # pylint: disable=import-outside-toplevel
+        from pyVoIP.VoIP import InvalidStateError
+
         with self._lock:
             if self._current_call is None:
                 logger.debug("No active call to hang up")
@@ -302,7 +305,21 @@ class PyVoIPClient(SIPClient):
 
             try:
                 self._current_call.hangup()
-            except (OSError, RuntimeError, AttributeError) as e:
+            except InvalidStateError:
+                # Call isn't answered yet (we're still in CALLING). pyVoIP
+                # doesn't expose a proper CANCEL primitive, so use bye() which
+                # at least drops local tracking without raising. The remote
+                # side will time out its INVITE.
+                logger.debug("Call not yet answered; using bye() instead of hangup()")
+                try:
+                    self._current_call.bye()
+                except (OSError, RuntimeError, AttributeError) as e:
+                    logger.debug("bye() also failed (probably already torn down): %s", e)
+            except AttributeError as e:
+                # Same pyVoIP cleanup bug as reject_call: stops RTP that
+                # never started. SIP-level hangup still succeeds.
+                logger.debug("pyVoIP cleanup non-error after hangup(): %s", e)
+            except (OSError, RuntimeError) as e:
                 logger.warning("Error hanging up call: %s", e)
 
             self._current_call = None
@@ -356,7 +373,15 @@ class PyVoIPClient(SIPClient):
         with self._lock:
             if self._current_call is not None:
                 logger.warning("Already in a call, denying incoming call")
-                call.deny()
+                try:
+                    call.deny()
+                except AttributeError as e:
+                    # pyVoIP bug: deny() -> RTPClient.stop() touches self.sin,
+                    # which is only created in start(). Denied calls never
+                    # started RTP. SIP-level denial still succeeds.
+                    logger.debug("pyVoIP cleanup non-error after deny(): %s", e)
+                except (OSError, RuntimeError) as e:
+                    logger.warning("Error denying incoming call: %s", e)
                 return
 
             # Extract caller ID from call request

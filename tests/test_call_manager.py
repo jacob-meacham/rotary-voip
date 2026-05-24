@@ -154,10 +154,9 @@ def test_digit_timeout_triggers_validation(call_manager, mock_config):
     call_manager.start()
     call_manager._on_off_hook()
 
-    # Dial a number
-    call_manager._on_digit("5")
-    call_manager._on_digit("5")
-    call_manager._on_digit("5")
+    # Dial a number (7 digits — meets _MIN_DIALABLE_LENGTH)
+    for digit in "5555555":
+        call_manager._on_digit(digit)
 
     # Manually trigger timeout
     call_manager._on_digit_timeout()
@@ -172,10 +171,9 @@ def test_allowlist_blocks_number(call_manager, mock_config, mock_sip_client):
     call_manager.start()
     call_manager._on_off_hook()
 
-    # Dial a number
-    call_manager._on_digit("9")
-    call_manager._on_digit("9")
-    call_manager._on_digit("9")
+    # Dial a number (7 digits so we pass the length check and reach allowlist)
+    for digit in "9999999":
+        call_manager._on_digit(digit)
     call_manager._on_digit_timeout()
 
     # Should transition to ERROR state
@@ -211,10 +209,9 @@ def test_outbound_call_flow(call_manager, mock_config, mock_sip_client):
     call_manager._on_off_hook()
     assert call_manager.get_state() == PhoneState.OFF_HOOK_WAITING
 
-    # Dial number
-    call_manager._on_digit("5")
-    call_manager._on_digit("5")
-    call_manager._on_digit("5")
+    # Dial number (7 digits — meets minimum dialable length)
+    for digit in "5555555":
+        call_manager._on_digit(digit)
     call_manager._on_digit_timeout()
     assert call_manager.get_state() == PhoneState.CALLING
 
@@ -360,8 +357,9 @@ def test_call_ended_while_off_hook(call_manager, mock_hook_monitor):
     # Call ends but phone still off-hook
     call_manager._on_call_ended()
 
-    # Should transition to OFF_HOOK_WAITING
-    assert call_manager.get_state() == PhoneState.OFF_HOOK_WAITING
+    # Must hang up and pick back up to dial again — sit in OFF_HOOK_AFTER_CALL
+    # rather than going back to OFF_HOOK_WAITING (which would accept digits).
+    assert call_manager.get_state() == PhoneState.OFF_HOOK_AFTER_CALL
 
 
 def test_make_call_failure(call_manager, mock_config, mock_sip_client):
@@ -371,9 +369,8 @@ def test_make_call_failure(call_manager, mock_config, mock_sip_client):
 
     call_manager.start()
     call_manager._on_off_hook()
-    call_manager._on_digit("5")
-    call_manager._on_digit("5")
-    call_manager._on_digit("5")
+    for digit in "5555555":
+        call_manager._on_digit(digit)
     call_manager._on_digit_timeout()
 
     # Should transition to ERROR state

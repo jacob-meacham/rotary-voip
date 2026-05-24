@@ -38,6 +38,11 @@ class PhoneState(Enum):
     CALLING = "calling"  # Outbound call in progress
     RINGING = "ringing"  # Incoming call, phone is ringing
     CONNECTED = "connected"  # Active call
+    # Call ended (either side hung up) but our handset is still lifted. User
+    # must put it back on the cradle before a new call can be placed — digits
+    # are ignored in this state. Mirrors the "fast busy / re-order" tone
+    # behavior of a real telco line.
+    OFF_HOOK_AFTER_CALL = "off_hook_after_call"
     ERROR = "error"  # Error state (blocked number, call failed, etc.)
 
 
@@ -425,6 +430,11 @@ class CallManager:  # pylint: disable=too-many-instance-attributes
             # Validate and process the number
             self._validate_and_call()
 
+    # Minimum digit count for something we'll dial as a real phone number.
+    # Anything shorter that doesn't match a speed-dial code is treated as
+    # spurious (dial-contact bounce on pickup, mis-counted pulses, etc.).
+    _MIN_DIALABLE_LENGTH = 7
+
     def _validate_and_call(self) -> None:
         """Validate the dialed number and initiate call (must be called with lock held)."""
         dialed = self._dialed_number
@@ -440,6 +450,26 @@ class CallManager:  # pylint: disable=too-many-instance-attributes
             logger.info("Speed dial %s -> %s", dialed, speed_dial_number)
             speed_dial_code = dialed
             destination = speed_dial_number
+
+        # Bail out on anything that isn't a speed dial AND isn't long enough
+        # to be a real phone number. Catches spurious pulses from pickup noise.
+        if not speed_dial_number and len(dialed) < self._MIN_DIALABLE_LENGTH:
+            logger.warning(
+                "Dialed '%s' is too short (need %d+ digits or a speed-dial code), not calling",
+                dialed,
+                self._MIN_DIALABLE_LENGTH,
+            )
+            self._emit_event(
+                "call_rejected",
+                {
+                    "direction": "outbound",
+                    "number": dialed,
+                    "destination": destination,
+                    "reason": f"Number '{dialed}' is too short and not a speed-dial code",
+                },
+            )
+            self._transition_to(PhoneState.ERROR, f"Number '{dialed}' too short")
+            return
 
         # Check allowlist
         if not self._config.is_allowed(destination):
@@ -640,13 +670,12 @@ class CallManager:  # pylint: disable=too-many-instance-attributes
                 self._dialed_number = ""
                 self._transition_to(PhoneState.IDLE)
             else:
-                # Phone is still off-hook, wait for user to hang up
+                # Phone is still off-hook — sit in OFF_HOOK_AFTER_CALL until
+                # user hangs up. No dial tone, no digit acceptance. They must
+                # cycle the cradle to place another call.
                 logger.info("Call ended but phone still off-hook, waiting for hangup")
                 self._dialed_number = ""
-                self._transition_to(PhoneState.OFF_HOOK_WAITING)
-                # Start dial tone again so user can make another call
-                if self._dial_tone:
-                    self._dial_tone.start()
+                self._transition_to(PhoneState.OFF_HOOK_AFTER_CALL)
 
     def _determine_call_status(self) -> str:
         """Determine the final status of a call based on current state.
@@ -702,8 +731,7 @@ class CallManager:  # pylint: disable=too-many-instance-attributes
                 self._dialed_number = ""
                 self._transition_to(PhoneState.IDLE)
             else:
-                # Phone still off-hook, let user try again
+                # Phone still off-hook — same as the normal call-end path,
+                # require a hang-up before another call can be placed.
                 self._dialed_number = ""
-                self._transition_to(PhoneState.OFF_HOOK_WAITING)
-                if self._dial_tone:
-                    self._dial_tone.start()
+                self._transition_to(PhoneState.OFF_HOOK_AFTER_CALL)

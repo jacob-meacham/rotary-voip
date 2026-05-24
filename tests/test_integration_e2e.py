@@ -220,12 +220,15 @@ def test_allowlist_blocking(phone_system):
     # Set allowlist to block all
     config.is_allowed.return_value = False
 
-    # Pick up and dial
+    # Use a speed-dial code so we exercise the allowlist check rather than the
+    # length validator. (Real phone numbers are 7+ digits; dialing 7 digits via
+    # GPIO simulation is too long to fit reliably inside the test's inter-digit
+    # timeout window.)
+    config.get_speed_dial.return_value = "+19999999999"
+
     simulate_hook_off(gpio)
     time.sleep(0.1)
 
-    simulate_dial_digit(gpio, "9")
-    time.sleep(0.25)
     simulate_dial_digit(gpio, "9")
     time.sleep(0.25)
     simulate_dial_digit(gpio, "9")
