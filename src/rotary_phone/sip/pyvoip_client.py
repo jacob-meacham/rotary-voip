@@ -99,7 +99,7 @@ class PyVoIPClient(SIPClient):
                 self._phone = None
                 self._set_call_state(CallState.IDLE)
                 raise
-            except Exception as e:
+            except (OSError, RuntimeError) as e:
                 logger.error("Registration failed: %s", e)
                 self._phone = None
                 self._set_call_state(CallState.IDLE)
@@ -166,14 +166,14 @@ class PyVoIPClient(SIPClient):
             if self._current_call is not None:
                 try:
                     self._current_call.hangup()
-                except Exception as e:
+                except (OSError, RuntimeError, AttributeError) as e:
                     logger.warning("Error hanging up call during unregister: %s", e)
                 self._current_call = None
 
             # Stop the phone
             try:
                 self._phone.stop()
-            except Exception as e:
+            except (OSError, RuntimeError) as e:
                 logger.warning("Error stopping phone: %s", e)
 
             self._phone = None
@@ -210,7 +210,7 @@ class PyVoIPClient(SIPClient):
                 self._current_call = None
                 self._set_call_state(CallState.REGISTERED)
                 raise
-            except Exception as e:
+            except (OSError, RuntimeError) as e:
                 logger.error("Error making call: %s", e)
                 self._current_call = None
                 self._set_call_state(CallState.REGISTERED)
@@ -242,7 +242,7 @@ class PyVoIPClient(SIPClient):
 
                 try:
                     pyvoip_state = current_call.state
-                except Exception as e:
+                except (OSError, RuntimeError, AttributeError) as e:
                     logger.error("Error reading pyVoIP call state: %s", e)
                     return
 
@@ -287,9 +287,9 @@ class PyVoIPClient(SIPClient):
                 if self._on_call_answered:
                     self._on_call_answered()
 
-            except Exception as e:
+            except (OSError, RuntimeError, AttributeError) as e:
                 logger.error("Error answering call: %s", e)
-                raise
+                raise SIPCallError(str(e), direction="inbound") from e
 
     def hangup(self) -> None:
         """Hang up the current call."""
@@ -302,7 +302,7 @@ class PyVoIPClient(SIPClient):
 
             try:
                 self._current_call.hangup()
-            except Exception as e:
+            except (OSError, RuntimeError, AttributeError) as e:
                 logger.warning("Error hanging up call: %s", e)
 
             self._current_call = None
@@ -323,7 +323,7 @@ class PyVoIPClient(SIPClient):
 
             try:
                 self._current_call.deny()
-            except Exception as e:
+            except (OSError, RuntimeError, AttributeError) as e:
                 logger.warning("Error rejecting call: %s", e)
 
             self._current_call = None
