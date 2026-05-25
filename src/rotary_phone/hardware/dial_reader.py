@@ -1,16 +1,16 @@
 """Rotary dial pulse reader for detecting dialed digits.
 
 Counts falling edges on DIAL_PULSE and emits a digit when no further
-pulse has arrived within pulse_timeout seconds. The hardware-side cap
-on the DIAL_PULSE line (see HARDWARE.md) takes care of fast bounce
-edges and the contact-close glitch the off-normal switch otherwise
-created on the pulse line; software-side debounce is a small extra
-filter.
+pulse has arrived within pulse_timeout seconds.
 
-The dial's off-normal switch (DIAL_ACTIVE / GPIO22) is not used here —
-on this dial the off-normal contact briefly breaks during each pulse
-cycle, so it doesn't behave as a clean "dial is active" gate. It's
-left wired (the pin claim is harmless) but DialReader doesn't watch it.
+The dial's off-normal switch (DIAL_ACTIVE / GPIO22) is polled on each
+pulse: if it currently reads HIGH (dial at rest), the pulse is treated
+as spurious — phantom from the hook switch firing, EMI from elsewhere,
+etc. — and dropped. This is robust against the fact that GPIO22 itself
+chatters during the pulse train (because off-normal mirrors pulse on
+this dial's internal wiring): a momentary HIGH between pulses doesn't
+coincide with a pulse on GPIO27, so the polled value is reliably LOW
+when a real pulse is happening.
 """
 
 import logging
@@ -19,24 +19,16 @@ import time
 from typing import Callable, Optional
 
 from rotary_phone.hardware.gpio_abstraction import GPIO
-from rotary_phone.hardware.pins import DIAL_PULSE
+from rotary_phone.hardware.pins import DIAL_ACTIVE, DIAL_PULSE
 
 logger = logging.getLogger(__name__)
 
-# Seconds to wait after the last pulse before considering the digit complete.
 DEFAULT_PULSE_TIMEOUT = 0.25
-# Minimum gap between accepted pulse edges. Real pulses are ~100 ms apart,
-# bounce is typically <5 ms — anything tighter than this is contact bounce.
 DEFAULT_PULSE_DEBOUNCE = 0.008
 
 
 class DialReader:
-    """Reads pulses from a rotary dial and detects dialed digits.
-
-    A pulse cycle on DIAL_PULSE = one digit's worth of pulses (1-9 for
-    digits 1-9, 10 for 0). After pulse_timeout of silence, the count
-    is converted to a digit and emitted via the on_digit callback.
-    """
+    """Reads pulses from a rotary dial and detects dialed digits."""
 
     def __init__(
         self,
@@ -83,6 +75,10 @@ class DialReader:
         self._gpio.setup(DIAL_PULSE, GPIO.IN, pull_up_down=GPIO.PUD_UP)
         self._gpio.add_event_detect(DIAL_PULSE, GPIO.FALLING, callback=self._on_pulse)
 
+        # We don't subscribe to edges on DIAL_ACTIVE — we just poll its level
+        # when a pulse arrives. setup() claims the pin so input() works.
+        self._gpio.setup(DIAL_ACTIVE, GPIO.IN, pull_up_down=GPIO.PUD_UP)
+
         logger.info("DialReader started")
 
     def stop(self) -> None:
@@ -109,6 +105,15 @@ class DialReader:
     def _on_pulse(self, _pin: int) -> None:
         """Handle a dial pulse (falling edge on DIAL_PULSE)."""
         if not self._running:
+            return
+
+        # Drop pulses while the dial is at rest. The off-normal switch reads
+        # HIGH at rest and LOW while the dial is anywhere off its rest
+        # position (including during the pulse train). A spurious falling
+        # edge on DIAL_PULSE while DIAL_ACTIVE is HIGH is noise — hook
+        # switch operation, EMI, etc. — and shouldn't be counted as a pulse.
+        if self._gpio.input(DIAL_ACTIVE) == GPIO.HIGH:
+            logger.debug("Pulse ignored (dial at rest)")
             return
 
         now = time.monotonic()

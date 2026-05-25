@@ -8,20 +8,30 @@ import time
 
 from rotary_phone.hardware import DIAL_PULSE, HOOK
 from rotary_phone.hardware.gpio_abstraction import GPIO, MockGPIO
+from rotary_phone.hardware.pins import DIAL_ACTIVE
 
 
 # Dial Simulation Helpers
+#
+# DialReader polls DIAL_ACTIVE on each pulse and drops the pulse if the line
+# is HIGH (dial at rest). Tests must drive DIAL_ACTIVE LOW around any
+# simulated pulse train so the pulses get accepted.
 
 
 def simulate_pulse(gpio: MockGPIO) -> None:
     """Simulate a single dial pulse (falling edge on DIAL_PULSE pin).
 
+    Drives DIAL_ACTIVE LOW for the duration so the reader's level check
+    accepts the pulse. Resets DIAL_ACTIVE HIGH on exit.
+
     Args:
         gpio: MockGPIO instance to simulate on
     """
+    gpio.set_input(DIAL_ACTIVE, GPIO.LOW)
     gpio.set_input(DIAL_PULSE, GPIO.LOW)
     time.sleep(0.01)
     gpio.set_input(DIAL_PULSE, GPIO.HIGH)
+    gpio.set_input(DIAL_ACTIVE, GPIO.HIGH)
 
 
 def simulate_dial_digit(gpio: MockGPIO, digit: str, pulse_gap: float = 0.06) -> None:
@@ -34,10 +44,17 @@ def simulate_dial_digit(gpio: MockGPIO, digit: str, pulse_gap: float = 0.06) -> 
     """
     pulse_count = 10 if digit == "0" else int(digit)
 
-    for i in range(pulse_count):
-        simulate_pulse(gpio)
-        if i < pulse_count - 1:
-            time.sleep(pulse_gap)
+    # Hold DIAL_ACTIVE LOW for the whole pulse train
+    gpio.set_input(DIAL_ACTIVE, GPIO.LOW)
+    try:
+        for i in range(pulse_count):
+            gpio.set_input(DIAL_PULSE, GPIO.LOW)
+            time.sleep(0.01)
+            gpio.set_input(DIAL_PULSE, GPIO.HIGH)
+            if i < pulse_count - 1:
+                time.sleep(pulse_gap)
+    finally:
+        gpio.set_input(DIAL_ACTIVE, GPIO.HIGH)
 
 
 def simulate_dial_number(

@@ -19,7 +19,7 @@ from rotary_phone.call_manager import CallManager, PhoneState
 from rotary_phone.hardware.dial_reader import DialReader
 from rotary_phone.hardware.gpio_abstraction import MockGPIO
 from rotary_phone.hardware.hook_monitor import HookMonitor, HookState
-from rotary_phone.hardware.pins import DIAL_PULSE, HOOK, RINGER
+from rotary_phone.hardware.pins import DIAL_ACTIVE, DIAL_PULSE, HOOK, RINGER
 from rotary_phone.hardware.ringer import Ringer
 from rotary_phone.sip.in_memory_client import InMemorySIPClient
 from rotary_phone.sip.sip_client import CallState
@@ -112,16 +112,23 @@ def simulate_hook_on(gpio):
 def simulate_dial_digit(gpio, digit):
     """Simulate dialing a digit on the rotary dial.
 
+    Holds DIAL_ACTIVE LOW for the pulse train so the reader (which polls
+    DIAL_ACTIVE on each pulse) accepts the pulses.
+
     Args:
         gpio: MockGPIO instance
         digit: Digit to dial (0-9)
     """
     pulses = 10 if digit == "0" else int(digit)
-    for _ in range(pulses):
-        gpio.set_input(DIAL_PULSE, MockGPIO.LOW)  # Falling edge
-        time.sleep(0.03)
-        gpio.set_input(DIAL_PULSE, MockGPIO.HIGH)  # Rising edge
-        time.sleep(0.03)
+    gpio.set_input(DIAL_ACTIVE, MockGPIO.LOW)
+    try:
+        for _ in range(pulses):
+            gpio.set_input(DIAL_PULSE, MockGPIO.LOW)  # Falling edge
+            time.sleep(0.03)
+            gpio.set_input(DIAL_PULSE, MockGPIO.HIGH)  # Rising edge
+            time.sleep(0.03)
+    finally:
+        gpio.set_input(DIAL_ACTIVE, MockGPIO.HIGH)
 
 
 @pytest.mark.flaky
