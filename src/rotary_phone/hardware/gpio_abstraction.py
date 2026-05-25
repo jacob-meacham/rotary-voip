@@ -338,12 +338,25 @@ class RealGPIO(GPIO):
         lgpio_edge = edge_map[edge]
 
         if callback:
-            # lgpio callback signature is (chip, gpio, level, timestamp)
-            # Wrap to match RPi.GPIO signature (pin)
+            # lgpio callback signature is (chip, gpio, level, timestamp).
+            # We claimed the pin with BOTH_EDGES in setup() (so reads still
+            # work and edge alerts fire), but lgpio delivers alerts for both
+            # directions regardless of the edge passed to .callback() here.
+            # Filter in the wrapper so each real pulse only invokes the user
+            # callback once.
+            wanted_levels: set[int]
+            if edge == Edge.FALLING:
+                wanted_levels = {0}
+            elif edge == Edge.RISING:
+                wanted_levels = {1}
+            else:  # Edge.BOTH
+                wanted_levels = {0, 1}
+
             def wrapped_callback(
                 chip: int, gpio: int, level: int, timestamp: int  # pylint: disable=unused-argument
             ) -> None:
-                callback(gpio)
+                if level in wanted_levels:
+                    callback(gpio)
 
             cb = self._lgpio.callback(self._handle, pin, lgpio_edge, wrapped_callback)
             self._callbacks[pin] = cb
