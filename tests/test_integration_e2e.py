@@ -112,8 +112,8 @@ def simulate_hook_on(gpio):
 def simulate_dial_digit(gpio, digit):
     """Simulate dialing a digit on the rotary dial.
 
-    Holds DIAL_ACTIVE LOW for the pulse train so the reader (which polls
-    DIAL_ACTIVE on each pulse) accepts the pulses.
+    Holds DIAL_ACTIVE LOW for the pulse train, waiting through the
+    reader's dial-start settle window before sending the first pulse.
 
     Args:
         gpio: MockGPIO instance
@@ -121,6 +121,7 @@ def simulate_dial_digit(gpio, digit):
     """
     pulses = 10 if digit == "0" else int(digit)
     gpio.set_input(DIAL_ACTIVE, MockGPIO.LOW)
+    time.sleep(0.07)  # Wait through DialReader's dial-start settle window
     try:
         for _ in range(pulses):
             gpio.set_input(DIAL_PULSE, MockGPIO.LOW)  # Falling edge

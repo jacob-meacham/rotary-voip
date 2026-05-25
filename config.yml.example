@@ -29,6 +29,8 @@ timing:
   ring_duration: 2.0            # Ring on time
   ring_pause: 4.0               # Ring off time
   pulse_debounce: 0.008         # Min seconds between pulses (drops contact bounce)
+  pulse_settle: 0.05            # Ignore pulses in this window after dial first starts moving
+  dial_quiet_period: 0.30       # DIAL_ACTIVE LOW counts as "fresh start" only after this much quiet
   hook_debounce_time: 0.01      # Debounce time for hook switch (prevents bouncing)
   sip_registration_timeout: 10.0  # How long to wait for SIP registration
   call_attempt_timeout: 60.0    # How long to wait for outbound call to connect

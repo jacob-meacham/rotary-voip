@@ -7,7 +7,7 @@ import pytest
 
 from rotary_phone.hardware.dial_reader import DialReader
 from rotary_phone.hardware.gpio_abstraction import MockGPIO
-from tests.test_harness import simulate_dial_digit, simulate_dial_number, simulate_pulse
+from tests.test_harness import simulate_dial_digit, simulate_dial_number
 
 # Short pulse timeout so tests don't wait long.
 TEST_PULSE_TIMEOUT = 0.1
@@ -113,13 +113,13 @@ def test_dial_reader_slow_pulses(mock_gpio: MockGPIO, collected_digits: List[str
 
 
 def test_dial_reader_partial_dial_timeout(mock_gpio: MockGPIO, collected_digits: List[str]) -> None:
-    """Test partial pulse sequence timeout behavior."""
+    """Two pulses within one dial cycle emit digit '2' after the timeout fires."""
     reader = _new_reader(mock_gpio, on_digit=lambda d: collected_digits.append(d))
     reader.start()
 
-    simulate_pulse(mock_gpio)
-    time.sleep(0.05)
-    simulate_pulse(mock_gpio)
+    # Dial '2' (2 pulses in a single dial cycle). The inter-pulse timeout
+    # fires after the cycle completes and emits the digit.
+    simulate_dial_digit(mock_gpio, "2")
     time.sleep(TEST_PULSE_TIMEOUT + 0.05)
 
     reader.stop()

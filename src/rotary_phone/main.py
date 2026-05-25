@@ -157,6 +157,8 @@ def _init_hardware(gpio: GPIO, config: ConfigManager) -> HardwareComponents:
         gpio=gpio,
         pulse_timeout=timing.get("pulse_timeout", 0.25),
         pulse_debounce=timing.get("pulse_debounce", 0.008),
+        pulse_settle=timing.get("pulse_settle", 0.05),
+        dial_quiet_period=timing.get("dial_quiet_period", 0.30),
     )
     logger.info("  - DialReader initialized")
 

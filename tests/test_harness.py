@@ -18,16 +18,21 @@ from rotary_phone.hardware.pins import DIAL_ACTIVE
 # simulated pulse train so the pulses get accepted.
 
 
+_TEST_DIAL_SETTLE = 0.07  # must exceed DialReader's pulse_settle default
+
+
 def simulate_pulse(gpio: MockGPIO) -> None:
     """Simulate a single dial pulse (falling edge on DIAL_PULSE pin).
 
-    Drives DIAL_ACTIVE LOW for the duration so the reader's level check
-    accepts the pulse. Resets DIAL_ACTIVE HIGH on exit.
+    Drives DIAL_ACTIVE LOW for the duration (waiting out the settle
+    window) so the reader accepts the pulse. Resets DIAL_ACTIVE HIGH
+    on exit.
 
     Args:
         gpio: MockGPIO instance to simulate on
     """
     gpio.set_input(DIAL_ACTIVE, GPIO.LOW)
+    time.sleep(_TEST_DIAL_SETTLE)
     gpio.set_input(DIAL_PULSE, GPIO.LOW)
     time.sleep(0.01)
     gpio.set_input(DIAL_PULSE, GPIO.HIGH)
@@ -44,8 +49,10 @@ def simulate_dial_digit(gpio: MockGPIO, digit: str, pulse_gap: float = 0.06) -> 
     """
     pulse_count = 10 if digit == "0" else int(digit)
 
-    # Hold DIAL_ACTIVE LOW for the whole pulse train
+    # Hold DIAL_ACTIVE LOW for the whole pulse train, waiting out the
+    # reader's dial-start settle window before sending the first pulse.
     gpio.set_input(DIAL_ACTIVE, GPIO.LOW)
+    time.sleep(_TEST_DIAL_SETTLE)
     try:
         for i in range(pulse_count):
             gpio.set_input(DIAL_PULSE, GPIO.LOW)
