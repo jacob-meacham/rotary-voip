@@ -181,3 +181,23 @@ The save endpoint writes the new YAML to a temp file, instantiates a *whole* `Co
 6. ⚠️ Split `_on_off_hook` and `send_audio_file` into single-responsibility helpers. **PARTIAL — `_on_off_hook` split in `1a2daf0`; `send_audio_file` pending (#5).**
 
 This is good code — better than most hobby-scale projects ever reach. The flaws are the kind you only catch once it's worth catching.
+
+---
+
+## Hardware-bring-up backlog (2026-05-25)
+
+Items deferred while getting the first phone working end-to-end with real hardware. Address after dialing is rock-solid.
+
+### Audio
+- **Error sound on ERROR state**: when CallManager transitions into PhoneState.ERROR (number too short, allowlist block, call failed, etc.), play `audio.error_tone` through the handset earpiece. Needs the same pattern as `DialTone` — small player class, started by CallManager, stopped on hang-up. The config key already exists in `config.yml.example` and is round-tripped by the web admin, but nothing consumes it yet.
+- **Busy tone** on RFC 3261 487 / 486 responses — same kind of thing, `audio.busy_tone` is already in config.
+
+### Dialing UX (more forgiving for kids)
+- **Longer inter-digit timeout when number is short**: current `pulse_timeout` (post-digit) is fixed at 0.25 s and `inter_digit_timeout` (CallManager) is 5 s. For a partial number under 7 digits with no speed-dial match, wait much longer (60+ s) before considering the dial complete. Kids pause between digits.
+- **Speed-dial buffer wait**: if the current dialed string matches a speed-dial code (e.g. "11") but more digits could still arrive that would change the result (e.g. "11" vs "112"), wait N seconds before committing to the speed-dial expansion.
+- **Use GPIO22 to distinguish "dial just started" vs "waiting between pulses"**: the off-normal switch tells us whether the dial is currently in motion. A long pause with GPIO22 HIGH (dial at rest) means the user has stopped dialing; a pause with GPIO22 LOW (mid-dial) means they're still mid-digit. Different timeouts apply.
+- **Default area code**: config key `dial.default_area_code: "406"` (or similar). When the dialed number is exactly 7 digits, prepend the default area code before sending to the SIP client. 10-digit dials bypass.
+
+### Other
+- `_normalize_phone_number` is NANP-only (carryover from staff review item 9c).
+- Config save endpoint should atomic-write + validate before swap (item 8).

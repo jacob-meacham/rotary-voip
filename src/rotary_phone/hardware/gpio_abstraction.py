@@ -270,122 +270,207 @@ class MockGPIO(GPIO):  # pylint: disable=too-many-instance-attributes
             }
 
 
-class RealGPIO(GPIO):
-    """Real GPIO implementation using lgpio."""
+class RealGPIO(GPIO):  # pylint: disable=too-many-instance-attributes
+    """Real GPIO implementation using libgpiod for inputs and lgpio for outputs.
+
+    Input edge detection goes through libgpiod (same library gpiomon uses), so
+    edge counts match what gpiomon would show. lgpio is still used for output
+    pin writes because nothing about it was broken there.
+    """
+
+    _CHIP_PATH = "/dev/gpiochip0"
+    _CONSUMER = "rotary-phone"
 
     def __init__(self) -> None:
-        """Initialize real GPIO using lgpio."""
+        """Initialize real GPIO."""
         try:
-            import lgpio  # type: ignore  # pylint: disable=import-outside-toplevel
-
-            self._lgpio = lgpio
-            self._handle = lgpio.gpiochip_open(0)
-            self._callbacks: Dict[int, Any] = {}
-            self._pin_modes: Dict[int, PinMode] = {}
-            logger.info("Real GPIO initialized using lgpio")
+            # pylint: disable=import-outside-toplevel
+            import lgpio  # type: ignore
+            import gpiod  # type: ignore
+            from gpiod.line import Bias, Direction, Edge as GEdge  # type: ignore
         except ImportError as e:
-            raise RuntimeError("lgpio not available. Install it or use mock GPIO mode.") from e
+            raise RuntimeError(
+                "lgpio and/or python3-libgpiod not available. "
+                "Install via apt (python3-lgpio python3-libgpiod) or use mock GPIO mode."
+            ) from e
+
+        self._lgpio = lgpio
+        self._gpiod = gpiod
+        self._gpiod_direction = Direction
+        self._gpiod_edge = GEdge
+        self._gpiod_bias = Bias
+
+        self._lgpio_handle = lgpio.gpiochip_open(0)
+        # Per-input-pin state. Each pin has its own gpiod request so we can
+        # re-request with edge detection when add_event_detect is called.
+        self._input_requests: Dict[int, Any] = {}
+        self._input_pulls: Dict[int, PullMode] = {}
+        self._monitor_threads: Dict[int, threading.Thread] = {}
+        self._monitor_stops: Dict[int, threading.Event] = {}
+        self._pin_modes: Dict[int, PinMode] = {}
+        logger.info("Real GPIO initialized (inputs: libgpiod, outputs: lgpio)")
 
     def setmode(self, mode: str) -> None:
-        """Set the pin numbering mode (BCM only supported with lgpio)."""
+        """Set the pin numbering mode (BCM only)."""
         if mode != "BCM":
-            logger.warning("lgpio only supports BCM mode, ignoring mode: %s", mode)
+            logger.warning("Only BCM mode supported, ignoring mode: %s", mode)
 
     def setup(self, pin: int, mode: PinMode, pull_up_down: PullMode = PullMode.OFF) -> None:
         """Set up a GPIO pin."""
-        # Map pull mode to lgpio flags
-        pull_flags = {
-            PullMode.OFF: self._lgpio.SET_PULL_NONE,
-            PullMode.UP: self._lgpio.SET_PULL_UP,
-            PullMode.DOWN: self._lgpio.SET_PULL_DOWN,
-        }
-        flags = pull_flags.get(pull_up_down, self._lgpio.SET_PULL_NONE)
-
         if mode == PinMode.IN:
-            # Claim as alert (not plain input) so subsequent add_event_detect()
-            # callbacks actually fire. lgpio.callback() on a pin claimed via
-            # gpio_claim_input is silently a no-op on at least lgpio 0.2.2 +
-            # Trixie's kernel; gpio_claim_alert works for both reads and edges.
-            self._lgpio.gpio_claim_alert(self._handle, pin, self._lgpio.BOTH_EDGES, flags)
+            self._input_pulls[pin] = pull_up_down
+            # Initial request: input only, no edge detection. add_event_detect
+            # will release and re-request with edge detection.
+            self._request_input(pin, edge=None)
         else:
-            self._lgpio.gpio_claim_output(self._handle, pin, 0, flags)
+            pull_flags = {
+                PullMode.OFF: self._lgpio.SET_PULL_NONE,
+                PullMode.UP: self._lgpio.SET_PULL_UP,
+                PullMode.DOWN: self._lgpio.SET_PULL_DOWN,
+            }
+            flags = pull_flags.get(pull_up_down, self._lgpio.SET_PULL_NONE)
+            self._lgpio.gpio_claim_output(self._lgpio_handle, pin, 0, flags)
 
         self._pin_modes[pin] = mode
 
+    def _request_input(self, pin: int, edge: Optional[Edge]) -> None:
+        """(Re)request an input line, optionally with edge detection."""
+        # Stop any existing monitor thread for this pin
+        if pin in self._monitor_threads:
+            self._stop_monitor(pin)
+
+        # Release existing request so we can re-request with new settings
+        if pin in self._input_requests:
+            self._input_requests[pin].release()
+            del self._input_requests[pin]
+
+        bias_map = {
+            PullMode.OFF: self._gpiod_bias.AS_IS,
+            PullMode.UP: self._gpiod_bias.PULL_UP,
+            PullMode.DOWN: self._gpiod_bias.PULL_DOWN,
+        }
+        bias = bias_map.get(self._input_pulls.get(pin, PullMode.OFF), self._gpiod_bias.AS_IS)
+
+        line_settings_kwargs: Dict[str, Any] = {
+            "direction": self._gpiod_direction.INPUT,
+            "bias": bias,
+        }
+        if edge is not None:
+            edge_map = {
+                Edge.RISING: self._gpiod_edge.RISING,
+                Edge.FALLING: self._gpiod_edge.FALLING,
+                Edge.BOTH: self._gpiod_edge.BOTH,
+            }
+            line_settings_kwargs["edge_detection"] = edge_map[edge]
+
+        line_settings = self._gpiod.LineSettings(**line_settings_kwargs)
+        request = self._gpiod.request_lines(
+            self._CHIP_PATH,
+            consumer=self._CONSUMER,
+            config={pin: line_settings},
+        )
+        self._input_requests[pin] = request
+
     def input(self, pin: int) -> int:
         """Read the value of a GPIO pin."""
-        result: int = self._lgpio.gpio_read(self._handle, pin)
+        if pin in self._input_requests:
+            value = self._input_requests[pin].get_value(pin)
+            # gpiod returns Value.ACTIVE / Value.INACTIVE. ACTIVE corresponds
+            # to whatever active-high/low was configured (default active-high).
+            return 1 if int(value) == 1 else 0
+        # For an output pin that someone reads back, use lgpio.
+        result: int = self._lgpio.gpio_read(self._lgpio_handle, pin)
         return result
 
     def output(self, pin: int, value: int) -> None:
         """Set the value of a GPIO pin."""
-        self._lgpio.gpio_write(self._handle, pin, value)
+        self._lgpio.gpio_write(self._lgpio_handle, pin, value)
 
     def add_event_detect(
         self,
         pin: int,
         edge: Edge,
         callback: Optional[Callable[[int], None]] = None,
-        bouncetime: int = 0,
+        bouncetime: int = 0,  # pylint: disable=unused-argument
     ) -> None:
-        """Add edge detection to a pin."""
-        # Map edge to lgpio constant
-        edge_map = {
-            Edge.RISING: self._lgpio.RISING_EDGE,
-            Edge.FALLING: self._lgpio.FALLING_EDGE,
-            Edge.BOTH: self._lgpio.BOTH_EDGES,
-        }
-        lgpio_edge = edge_map[edge]
+        """Add edge detection to a pin via libgpiod."""
+        # Re-request the line with edge detection enabled
+        self._request_input(pin, edge=edge)
 
-        if callback:
-            # lgpio callback signature is (chip, gpio, level, timestamp).
-            # We claimed the pin with BOTH_EDGES in setup() (so reads still
-            # work and edge alerts fire), but lgpio delivers alerts for both
-            # directions regardless of the edge passed to .callback() here.
-            # Filter in the wrapper so each real pulse only invokes the user
-            # callback once.
-            wanted_levels: set[int]
-            if edge == Edge.FALLING:
-                wanted_levels = {0}
-            elif edge == Edge.RISING:
-                wanted_levels = {1}
-            else:  # Edge.BOTH
-                wanted_levels = {0, 1}
+        if callback is None:
+            return
 
-            def wrapped_callback(
-                chip: int, gpio: int, level: int, timestamp: int  # pylint: disable=unused-argument
-            ) -> None:
-                if level in wanted_levels:
-                    callback(gpio)
+        # Start a background thread that polls for edge events and dispatches.
+        stop_event = threading.Event()
+        thread = threading.Thread(
+            target=self._monitor_loop,
+            args=(pin, callback, stop_event),
+            daemon=True,
+            name=f"gpio-edge-{pin}",
+        )
+        self._monitor_stops[pin] = stop_event
+        self._monitor_threads[pin] = thread
+        thread.start()
 
-            cb = self._lgpio.callback(self._handle, pin, lgpio_edge, wrapped_callback)
-            self._callbacks[pin] = cb
+    def _monitor_loop(
+        self,
+        pin: int,
+        callback: Callable[[int], None],
+        stop_event: threading.Event,
+    ) -> None:
+        """Background loop reading edge events for one input pin."""
+        request = self._input_requests[pin]
+        while not stop_event.is_set():
+            try:
+                # wait_edge_events returns True if events are available within
+                # the timeout, False otherwise. The short timeout gives us a
+                # chance to check stop_event periodically for clean shutdown.
+                if request.wait_edge_events(timeout=0.1):
+                    for _event in request.read_edge_events():
+                        try:
+                            callback(pin)
+                        except Exception:  # pylint: disable=broad-except
+                            logger.exception("Error in GPIO callback for pin %d", pin)
+            except Exception:  # pylint: disable=broad-except
+                logger.exception("Edge monitor loop error on pin %d, exiting", pin)
+                return
+
+    def _stop_monitor(self, pin: int) -> None:
+        """Stop the monitor thread for a pin, if running."""
+        if pin in self._monitor_stops:
+            self._monitor_stops[pin].set()
+        if pin in self._monitor_threads:
+            self._monitor_threads[pin].join(timeout=1.0)
+            del self._monitor_threads[pin]
+        self._monitor_stops.pop(pin, None)
 
     def remove_event_detect(self, pin: int) -> None:
         """Remove edge detection from a pin."""
-        if pin in self._callbacks:
-            self._callbacks[pin].cancel()
-            del self._callbacks[pin]
+        self._stop_monitor(pin)
+        # Re-request the line without edge detection so reads still work
+        if pin in self._input_pulls:
+            self._request_input(pin, edge=None)
 
     def cleanup(self, pin: Optional[int] = None) -> None:
         """Clean up GPIO resources."""
         if pin is None:
-            # Cancel all callbacks and close handle
-            for cb in self._callbacks.values():
-                cb.cancel()
-            self._callbacks.clear()
-            self._lgpio.gpiochip_close(self._handle)
+            for monitored_pin in list(self._monitor_threads.keys()):
+                self._stop_monitor(monitored_pin)
+            for request in self._input_requests.values():
+                request.release()
+            self._input_requests.clear()
+            self._lgpio.gpiochip_close(self._lgpio_handle)
         else:
-            # Free specific pin
-            if pin in self._callbacks:
-                self._callbacks[pin].cancel()
-                del self._callbacks[pin]
-            self._lgpio.gpio_free(self._handle, pin)
+            self._stop_monitor(pin)
+            if pin in self._input_requests:
+                self._input_requests[pin].release()
+                del self._input_requests[pin]
+            self._input_pulls.pop(pin, None)
             self._pin_modes.pop(pin, None)
 
     def setwarnings(self, enable: bool) -> None:
-        """Enable or disable warnings (no-op for lgpio)."""
-        _ = enable  # lgpio doesn't have a warnings setting
+        """Enable or disable warnings (no-op)."""
+        _ = enable
 
 
 def get_gpio(mock: bool) -> GPIO:
