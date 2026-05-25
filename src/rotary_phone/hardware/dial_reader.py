@@ -2,6 +2,7 @@
 
 import logging
 import threading
+import time
 from typing import Callable, Optional
 
 from rotary_phone.hardware.gpio_abstraction import GPIO
@@ -11,6 +12,10 @@ logger = logging.getLogger(__name__)
 
 # Default seconds to wait after last pulse before emitting the digit
 DEFAULT_PULSE_TIMEOUT = 0.3
+# Default debounce window. Real rotary pulses arrive at ~10 Hz (~100 ms apart),
+# while contact bounce is sub-millisecond up to a few milliseconds. 25 ms safely
+# discards bounce without dropping real pulses.
+DEFAULT_PULSE_DEBOUNCE = 0.025
 
 
 class DialReader:
@@ -32,6 +37,7 @@ class DialReader:
         gpio: GPIO,
         on_digit: Optional[Callable[[str], None]] = None,
         pulse_timeout: float = DEFAULT_PULSE_TIMEOUT,
+        pulse_debounce: float = DEFAULT_PULSE_DEBOUNCE,
     ) -> None:
         """Initialize the dial reader.
 
@@ -39,17 +45,25 @@ class DialReader:
             gpio: GPIO interface to use
             on_digit: Callback when a digit is detected (receives digit as string)
             pulse_timeout: Seconds to wait after last pulse before emitting digit
+            pulse_debounce: Minimum seconds between pulses — edges arriving
+                closer than this are treated as contact bounce and ignored.
         """
         self._gpio = gpio
         self._on_digit = on_digit
         self._pulse_timeout = pulse_timeout
+        self._pulse_debounce = pulse_debounce
 
         self._pulse_count = 0
+        self._last_pulse_time = 0.0
         self._timer: Optional[threading.Timer] = None
         self._lock = threading.Lock()
         self._running = False
 
-        logger.debug("DialReader initialized with pulse_timeout=%.3f", self._pulse_timeout)
+        logger.debug(
+            "DialReader initialized with pulse_timeout=%.3f, pulse_debounce=%.3f",
+            self._pulse_timeout,
+            self._pulse_debounce,
+        )
 
     def start(self) -> None:
         """Start monitoring for dial pulses."""
@@ -101,7 +115,15 @@ class DialReader:
         if not self._running:
             return
 
+        now = time.monotonic()
         with self._lock:
+            # Drop bounce: each real rotary pulse arrives ~100 ms after the
+            # last, but the contact chatters for a few ms on each open/close.
+            # Anything within pulse_debounce of the previous edge is bounce.
+            if (now - self._last_pulse_time) < self._pulse_debounce:
+                return
+            self._last_pulse_time = now
+
             # Increment pulse count
             self._pulse_count += 1
             logger.debug("Pulse detected, count=%d", self._pulse_count)
