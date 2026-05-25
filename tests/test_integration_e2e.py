@@ -19,7 +19,7 @@ from rotary_phone.call_manager import CallManager, PhoneState
 from rotary_phone.hardware.dial_reader import DialReader
 from rotary_phone.hardware.gpio_abstraction import MockGPIO
 from rotary_phone.hardware.hook_monitor import HookMonitor, HookState
-from rotary_phone.hardware.pins import DIAL_PULSE, HOOK, RINGER
+from rotary_phone.hardware.pins import DIAL_ACTIVE, DIAL_PULSE, HOOK, RINGER
 from rotary_phone.hardware.ringer import Ringer
 from rotary_phone.sip.in_memory_client import InMemorySIPClient
 from rotary_phone.sip.sip_client import CallState
@@ -66,7 +66,9 @@ def phone_system(mock_gpio, test_config):
 
     # Create components
     hook_monitor = HookMonitor(gpio=mock_gpio)
-    dial_reader = DialReader(gpio=mock_gpio)
+    # Short settle to match the test harness's simulate_dial_digit timing
+    # without making each digit take 200 ms of wall time.
+    dial_reader = DialReader(gpio=mock_gpio, pulse_settle=0.02, pulse_debounce=0.005)
     ringer = Ringer(gpio=mock_gpio, ring_on_duration=0.1, ring_off_duration=0.1)
     sip_client = InMemorySIPClient(registration_delay=0.0)  # Immediate registration
 
@@ -112,16 +114,24 @@ def simulate_hook_on(gpio):
 def simulate_dial_digit(gpio, digit):
     """Simulate dialing a digit on the rotary dial.
 
+    DialReader now uses DIAL_ACTIVE as the gate that delimits a digit:
+    drive it LOW around the pulse train, wait the settle window, send
+    pulses, then drive it HIGH so the reader emits the digit.
+
     Args:
         gpio: MockGPIO instance
         digit: Digit to dial (0-9)
     """
     pulses = 10 if digit == "0" else int(digit)
+    gpio.set_input(DIAL_ACTIVE, MockGPIO.LOW)
+    time.sleep(0.04)  # Wait through DialReader's pulse_settle window
     for _ in range(pulses):
         gpio.set_input(DIAL_PULSE, MockGPIO.LOW)  # Falling edge
         time.sleep(0.03)
         gpio.set_input(DIAL_PULSE, MockGPIO.HIGH)  # Rising edge
         time.sleep(0.03)
+    time.sleep(0.02)
+    gpio.set_input(DIAL_ACTIVE, MockGPIO.HIGH)
 
 
 @pytest.mark.flaky
