@@ -323,13 +323,13 @@ class RealGPIO(GPIO):  # pylint: disable=too-many-instance-attributes
             # will release and re-request with edge detection.
             self._request_input(pin, edge=None)
         else:
-            pull_flags = {
-                PullMode.OFF: self._lgpio.SET_PULL_NONE,
-                PullMode.UP: self._lgpio.SET_PULL_UP,
-                PullMode.DOWN: self._lgpio.SET_PULL_DOWN,
-            }
-            flags = pull_flags.get(pull_up_down, self._lgpio.SET_PULL_NONE)
-            self._lgpio.gpio_claim_output(self._lgpio_handle, pin, 0, flags)
+            # gpio_claim_output's lFlags is *drive* flags, not bias/pull
+            # flags — DRIVE_OPEN_DRAIN, DRIVE_OPEN_SOURCE, ACTIVE_LOW —
+            # and the integer values overlap with SET_PULL_*. Passing 0
+            # selects the default DRIVE_PUSH_PULL so HIGH actually drives
+            # the pin instead of letting it float.
+            self._lgpio.gpio_claim_output(self._lgpio_handle, pin, 0, 0)
+            _ = pull_up_down  # not meaningful for outputs
 
         self._pin_modes[pin] = mode
 
